@@ -74,6 +74,9 @@ def generate_ccp_dataset_val(args, imset, cat):
 		if np.isin(ann, cat_id).sum() > 0:
 			img = Image.open(args.img_root / '{}.jpg'.format(ann_id))
 			img.save(img_path / '{}.png'.format(ann_id))
+			seg = (ann == cat_id).astype('uint8')  # get segment of given category
+			seg = Image.fromarray(seg * 255)
+			seg.save(seg_path / '{}_0.png'.format(ann_id))
 		pb.update(1)
 	pb.close()
 
