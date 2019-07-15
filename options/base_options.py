@@ -4,13 +4,19 @@ from util import util
 import torch
 import models
 import data
+#import datetime
+
 
 
 class BaseOptions():
     def __init__(self):
         self.initialized = False
+        # # 获取当前时间并转换为str
+        # now = datetime.datetime.now()
+        # self.nowstr = now.strftime('%Y-%m-%d-%H-%M')
 
     def initialize(self, parser):
+        # parser.add_argument('--version', type=str, default=nowstr,help='version of the experiment. It decides where to store samples and models')
         parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
         parser.add_argument('--batch_size', type=int, default=1, help='input batch size')
         # Specify width and height for load and fine sizes
