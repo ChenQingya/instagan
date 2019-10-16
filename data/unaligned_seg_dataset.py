@@ -18,7 +18,7 @@ class UnalignedSegDataset(BaseDataset):
 	def initialize(self, opt):
 		self.opt = opt
 		self.root = opt.dataroot
-		self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')
+		self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')#`phase`就是对应例如`edges2shoes`文件夹下的子文件的名称（这里没有edges2shoes），这里选择`val`
 		self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')
 		self.max_instances = 20  # default: 20
 		self.seg_dir = 'seg'  # default: 'seg'
