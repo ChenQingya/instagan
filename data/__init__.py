@@ -5,17 +5,21 @@ from data.base_dataset import BaseDataset
 
 
 def find_dataset_using_name(dataset_name):
-    # Given the option --dataset_mode [datasetname],
+    # Given the option --dataset_mode [datasetname]
     # the file "data/datasetname_dataset.py"
     # will be imported.
+    # eg."dataset_name" is "unaligned_seg"
     dataset_filename = "data." + dataset_name + "_dataset"
+    # eg. "dataset_filename" is "data.unaligned_seg_dataset"
     datasetlib = importlib.import_module(dataset_filename)
 
     # In the file, the class called DatasetNameDataset() will
     # be instantiated. It has to be a subclass of BaseDataset,
     # and it is case-insensitive.
     dataset = None
+    # eg. "target_dataset_name" is "unalignedsegdataset"
     target_dataset_name = dataset_name.replace('_', '') + 'dataset'
+    # dict.items() : return (keys, values). eg."name,cls" is "unalignedsegdataset, cls",cls means the real datasets content
     for name, cls in datasetlib.__dict__.items():
         if name.lower() == target_dataset_name.lower() \
            and issubclass(cls, BaseDataset):
@@ -69,7 +73,12 @@ class CustomDatasetDataLoader(BaseDataLoader):
         return min(len(self.dataset), self.opt.max_dataset_size)
 
     def __iter__(self):
+        # Loading Batched and Non-Batched Data,Automatic batching (default).
+        # When batch_size (default 1) is not None,
+        # the data loader yields batched samples instead of individual samples.
+        # refer:https://pytorch.org/docs/stable/data.html#automatic-batching-default
         for i, data in enumerate(self.dataloader):
             if i * self.opt.batch_size >= self.opt.max_dataset_size:
                 break
+            # yield means 产出
             yield data

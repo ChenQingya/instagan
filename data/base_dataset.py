@@ -23,7 +23,7 @@ class BaseDataset(data.Dataset):
 
 def get_transform(opt):
     transform_list = []
-    # Modify transform to specify width and height
+    # Modify transform to specify width and height,指定输入图像的高度和宽度，或者指定seg的高度和宽度
     if opt.resize_or_crop == 'resize_and_crop':
         osize = [opt.loadSizeH, opt.loadSizeW]
         fsize = [opt.fineSizeH, opt.fineSizeW]

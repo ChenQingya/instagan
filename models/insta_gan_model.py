@@ -118,6 +118,9 @@ class InstaGANModel(BaseModel):
 
 	def set_input(self, input):
 		AtoB = self.opt.direction == 'AtoB'
+		# input is the datasets, we use input[idx]to get the item.
+		# eg.input['A'] or input['B'] or input['A_segs'] or input['B_segs']
+		# refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
 		self.real_A_img = input['A' if AtoB else 'B'].to(self.device)
 		self.real_B_img = input['B' if AtoB else 'A'].to(self.device)
 		real_A_segs = input['A_segs' if AtoB else 'B_segs']

@@ -13,9 +13,11 @@ class UnalignedDataset(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot
-        self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')
-        self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')
+        self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')# eg. self.dir_A is "datasets/shp2gir_coco/sampleA"
+        self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')# eg. self.dir_A is "datasets/shp2gir_coco/sampleB"
 
+        # eg. obtain all the images' paths of
+        # "datasets/shp2gir_coco/sampleA" or "datasets/shp2gir_coco/sampleB"
         self.A_paths = make_dataset(self.dir_A)
         self.B_paths = make_dataset(self.dir_B)
 
@@ -25,8 +27,13 @@ class UnalignedDataset(BaseDataset):
         self.B_size = len(self.B_paths)
         self.transform = get_transform(opt)
 
+    # Map-style datasets,A map-style dataset is one that implements
+    # the __getitem__() and __len__() protocols,
+    # and represents a map from (possibly non-integral) indices/keys to data samples.
+    # refer:https://pytorch.org/docs/stable/data.html#map-style-datasets
     def __getitem__(self, index):
         A_path = self.A_paths[index % self.A_size]
+        # serial_batches means no shuffle
         if self.opt.serial_batches:
             index_B = index % self.B_size
         else:
@@ -51,6 +58,8 @@ class UnalignedDataset(BaseDataset):
         if output_nc == 1:  # RGB to gray
             tmp = B[0, ...] * 0.299 + B[1, ...] * 0.587 + B[2, ...] * 0.114
             B = tmp.unsqueeze(0)
+        # eg. return an image of domain A in "datasets/shp2gir_coco/sampleA" and its path
+        # eg. and return an image of domain A in "datasets/shp2gir_coco/sampleA" and its path
         return {'A': A, 'B': B,
                 'A_paths': A_path, 'B_paths': B_path}
 
