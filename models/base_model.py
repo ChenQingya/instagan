@@ -156,4 +156,5 @@ class BaseModel():
         for net in nets:
             if net is not None:
                 for param in net.parameters():
+                    # 固定网络的参数
                     param.requires_grad = requires_grad
