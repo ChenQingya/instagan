@@ -24,7 +24,8 @@ def create_argument_parser():
 	parser.add_argument('--cat2', type=str, default='giraffe', help='category 2')
 	return parser
 
-
+# eg. generate from datasets/COCO(the original datasets download from the net), and save in datasets/shp2gir_coco
+# the difference is the generated has two domain images and their segs
 def generate_coco_dataset(args):
 	"""Generate COCO dataset (train/val, A/B)"""
 	args.data_root = Path(args.data_root)
@@ -45,29 +46,33 @@ def generate_coco_dataset_sub(args, idx1, idx2, cat):
 		- cat: category
 	"""
 	data_path = args.data_root / '{}2017'.format(idx1)
-	anno_path = args.data_root / 'annotations/instances_{}2017.json'.format(idx1)
+	anno_path = args.data_root / 'annotations/instances_{}2017.json'.format(idx1)	# eg. anno_path is "datasets/COCO/annotations/instances_train2017.json"
+																					# or "datasets/COCO/annotations/instances_val2017.json"
 	coco = COCO(anno_path)  # COCO API
 
-	img_path = args.save_root / '{}{}'.format(idx1, idx2)
-	seg_path = args.save_root / '{}{}_seg'.format(idx1, idx2)
-	img_path.mkdir()
+
+	img_path = args.save_root / '{}{}'.format(idx1, idx2)		# eg. img_path is "datasets/shp2gir_coco/trainA" or "datasets/shp2gir_coco/trainB"
+	seg_path = args.save_root / '{}{}_seg'.format(idx1, idx2)	# eg. img_path is "datasets/shp2gir_coco/trainA_seg" or "datasets/shp2gir_coco/trainB_seg"
+	img_path.mkdir()											# they are empty, therefore mkdir()s
 	seg_path.mkdir()
 
-	cat_id = coco.getCatIds(catNms=cat)
-	img_id = coco.getImgIds(catIds=cat_id)
-	imgs = coco.loadImgs(img_id)
+	cat_id = coco.getCatIds(catNms=cat)		# cat is "sheep" or "giraffe",get the category's id
+	img_id = coco.getImgIds(catIds=cat_id)	# get the ids of sheep/giraffe images，获得所有绵羊的图片id，或者所有长颈鹿的图片id
+	imgs = coco.loadImgs(img_id)			# 获得所有绵羊的图片(很多张)，或者所有长颈鹿的图片
 
+	# 进度条
 	pb = tqdm(total=len(imgs))
 	pb.set_description('{}{}'.format(idx1, idx2))
 	for img in imgs:
-		ann_ids = coco.getAnnIds(imgIds=img['id'], catIds=cat_id)
-		anns = coco.loadAnns(ann_ids)
+		ann_ids = coco.getAnnIds(imgIds=img['id'], catIds=cat_id)	# get annotation'id
+		anns = coco.loadAnns(ann_ids)								# get the annotation(many)
 
 		count = 0
 		for i in range(len(anns)):
-			seg = coco.annToMask(anns[i])
-			seg = Image.fromarray(seg * 255)
-			seg = resize(seg, args.image_size)
+			seg = coco.annToMask(anns[i])		# annotation to mask, the type is array now
+			seg = Image.fromarray(seg * 255)	# turn the seg array to seg image,each pix multi 255. why?
+			seg = resize(seg, args.image_size)	# resize the seg image
+			# np.sum
 			if np.sum(np.asarray(seg)) > 0:
 				seg.save(seg_path / '{}_{}.png'.format(pb.n, count))
 				count += 1
