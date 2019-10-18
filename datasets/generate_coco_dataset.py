@@ -60,7 +60,8 @@ def generate_coco_dataset_sub(args, idx1, idx2, cat):
 	img_id = coco.getImgIds(catIds=cat_id)	# get the ids of sheep/giraffe images，获得所有绵羊的图片id，或者所有长颈鹿的图片id
 	imgs = coco.loadImgs(img_id)			# 获得所有绵羊的图片(很多张)，或者所有长颈鹿的图片
 
-	# 进度条
+	# tqdm表示进度条,progress
+	# refer:https://tqdm.github.io/
 	pb = tqdm(total=len(imgs))
 	pb.set_description('{}{}'.format(idx1, idx2))
 	for img in imgs:
@@ -68,13 +69,13 @@ def generate_coco_dataset_sub(args, idx1, idx2, cat):
 		anns = coco.loadAnns(ann_ids)								# get the annotation(many)
 
 		count = 0
-		for i in range(len(anns)):
+		for i in range(len(anns)):				# 真正从标签生成mask的地方。
 			seg = coco.annToMask(anns[i])		# annotation to mask, the type is array now
 			seg = Image.fromarray(seg * 255)	# turn the seg array to seg image,each pix multi 255. why?
 			seg = resize(seg, args.image_size)	# resize the seg image
 			# np.sum
-			if np.sum(np.asarray(seg)) > 0:
-				seg.save(seg_path / '{}_{}.png'.format(pb.n, count))
+			if np.sum(np.asarray(seg)) > 0:								# 保存seg
+				seg.save(seg_path / '{}_{}.png'.format(pb.n, count))	# pb.n 表示？
 				count += 1
 
 		if count > 0:  # at least one instance exists

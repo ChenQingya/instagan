@@ -36,6 +36,7 @@ class UnalignedSegDataset(BaseDataset):
 		random.seed(seed)
 		return self.transform(image)
 
+	# 读取segs，已经存在的图，这里只是读取，并返回
 	def read_segs(self, seg_path, seed):
 		segs = list()
 		# max_instances means an image and its many segs
@@ -54,7 +55,7 @@ class UnalignedSegDataset(BaseDataset):
 				# 转成固定大小的seg
 				seg = self.fixed_transform(seg, seed)
 				segs.append(seg)
-			# if not exist
+			# if not exist，有些seg并不存在，因为是依据序号遍历，所以可能有不存在的seg
 			else:
 				# 若不存在，则生成的seg每个像素的值为-1
 				segs.append(-torch.ones(segs[0].size()))
