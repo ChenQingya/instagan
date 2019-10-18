@@ -106,6 +106,8 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False,
 # When LSGAN is used, it is basically same as MSELoss,
 # but it abstracts away the need to create the target label tensor
 # that has the same size as the input
+# 计算ganloss，已知常规形式：loss（output，target）。这里output就是以下的self.input，target就是target_real_label.
+# 注意loss（output，target），在此处，output和target都是tensor
 class GANLoss(nn.Module):
     def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0):
         super(GANLoss, self).__init__()
@@ -116,6 +118,7 @@ class GANLoss(nn.Module):
         else:
             self.loss = nn.BCELoss()
 
+    # 将target_is_real（形式很有可能是boolean，比如True或False）转成tensor，且大小和input一致
     def get_target_tensor(self, input, target_is_real):
         if target_is_real:
             target_tensor = self.real_label

@@ -13,15 +13,16 @@ class InstaGANModel(BaseModel):
 
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
-		# default CycleGAN did not use dropout
+		# default CycleGAN did not use dropout，instagan也不使用dropout
 		parser.set_defaults(no_dropout=True)
-		parser.add_argument('--set_order', type=str, default='decreasing', help='order of segmentation')
-		parser.add_argument('--ins_max', type=int, default=4, help='maximum number of instances to forward')
-		parser.add_argument('--ins_per', type=int, default=2, help='number of instances to forward, for one pass')
+		parser.add_argument('--set_order', type=str, default='decreasing', help='order of segmentation')			# why there is a order for segmentation?
+		parser.add_argument('--ins_max', type=int, default=4, help='maximum number of instances to forward')		# 所有训练中，最多可以使用到的instance的数目
+		parser.add_argument('--ins_per', type=int, default=2, help='number of instances to forward, for one pass')	# 一次迭代中，使用到的instance的数目
 		if is_train:
 			parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
 			parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
 			parser.add_argument('--lambda_idt', type=float, default=1.0, help='use identity mapping. Setting lambda_idt other than 0 has an effect of scaling the weight of the identity mapping loss')
+			# what's the difference between ctx and idt?
 			parser.add_argument('--lambda_ctx', type=float, default=1.0, help='use context preserving. Setting lambda_ctx other than 0 has an effect of scaling the weight of the context preserving loss')
 
 		return parser
@@ -59,10 +60,20 @@ class InstaGANModel(BaseModel):
 			self.fake_A_pool = ImagePool(opt.pool_size)
 			self.fake_B_pool = ImagePool(opt.pool_size)
 			# define loss functions
-			self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)
+			self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
 			self.criterionCyc = torch.nn.L1Loss()
 			self.criterionIdt = torch.nn.L1Loss()
+
+			# 以下初始化optimizer涉及两个函数，filter()和lambda
+			# filter() 函数
+			# 	用于过滤序列，过滤掉不符合条件的元素，返回由符合条件元素组成的新列表。
+			# 	该接收两个参数，第一个为函数，第二个为序列，序列的每个元素作为参数传递给函数进行判，然后返回 True 或 False，最后将返回 True 的元素放到新列表中。python3中filter返回迭代器对象
+			# lambda p: p.requires_grad
+			# 	这里匿名函数，p是参数，p.required_grad是表达式
+
 			# initialize optimizers
+			# 这里的filter，第一个为函数（匿名函数），第二个为序列（包含netG_A和netG_B的所有parameter），返回这些parameter中符合requires_grad=True的parameter。
+			# 相当于，网络中所有参数，只有当requires_grad为True的时候，该参数才传给Adam()
 			self.optimizer_G = torch.optim.Adam(filter(lambda p: p.requires_grad, itertools.chain(self.netG_A.parameters(), self.netG_B.parameters())), lr=opt.lr, betas=(opt.beta1, 0.999))
 			self.optimizer_D = torch.optim.Adam(filter(lambda p: p.requires_grad, itertools.chain(self.netD_A.parameters(), self.netD_B.parameters())), lr=opt.lr, betas=(opt.beta1, 0.999))
 			self.optimizers = []
@@ -116,6 +127,7 @@ class InstaGANModel(BaseModel):
 		"""Split data into image and mask (only assume 3-channel image)"""
 		return x[:, :3, :, :], x[:, 3:, :, :]
 
+	# input是数据集实例（类UnalignedSegDataset的实例）
 	def set_input(self, input):
 		AtoB = self.opt.direction == 'AtoB'
 		# input is the datasets, we use input[idx]to get the item.
@@ -123,7 +135,7 @@ class InstaGANModel(BaseModel):
 		# refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
 		self.real_A_img = input['A' if AtoB else 'B'].to(self.device)
 		self.real_B_img = input['B' if AtoB else 'A'].to(self.device)
-		real_A_segs = input['A_segs' if AtoB else 'B_segs']
+		real_A_segs = input['A_segs' if AtoB else 'B_segs']	# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs
 		real_B_segs = input['B_segs' if AtoB else 'A_segs']
 		self.real_A_segs = self.select_masks(real_A_segs).to(self.device)
 		self.real_B_segs = self.select_masks(real_B_segs).to(self.device)
