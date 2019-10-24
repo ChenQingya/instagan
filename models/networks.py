@@ -18,7 +18,7 @@ def get_norm_layer(norm_type='instance'):
         norm_layer = None
     else:
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
-    return norm_layer
+    return norm_layer   # 返回偏函数，功能类似norm层
 
 
 def get_scheduler(optimizer, opt):
@@ -195,19 +195,19 @@ class SpectralNorm(nn.Module):
 # downsampling/upsampling operations.
 # Code and idea originally from Justin Johnson's architecture.
 # https://github.com/jcjohnson/fast-neural-style/
-class ResnetGenerator(nn.Module):
+class ResnetGenerator(nn.Module):   # 使用resnet作为生成器的backbone net
     def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=9, padding_type='reflect'):
-        assert(n_blocks >= 0)
+        assert(n_blocks >= 0)   # 默认9个resnet block
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
         self.output_nc = output_nc
         self.ngf = ngf
-        if type(norm_layer) == functools.partial:
-            use_bias = norm_layer.func == nn.InstanceNorm2d
+        if type(norm_layer) == functools.partial:           # functools.partial：是一种类型。输入：type(functools.partial),输出type. 判断norm_layer的类型是不是偏函数
+            use_bias = norm_layer.func == nn.InstanceNorm2d # 是偏函数
         else:
-            use_bias = norm_layer == nn.InstanceNorm2d
+            use_bias = norm_layer == nn.InstanceNorm2d      # 不是偏函数
 
-        model = [nn.ReflectionPad2d(3),
+        model = [nn.ReflectionPad2d(3),                     # 加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
                  nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0,
                            bias=use_bias),
                  norm_layer(ngf),
@@ -215,7 +215,7 @@ class ResnetGenerator(nn.Module):
 
         n_downsampling = 2
         for i in range(n_downsampling):
-            mult = 2**i
+            mult = 2**i # 计算2的i次方
             model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
                                 stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),

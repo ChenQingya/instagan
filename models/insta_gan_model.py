@@ -41,18 +41,18 @@ class InstaGANModel(BaseModel):
 		visual_names_B_seg = ['real_B_seg', 'fake_A_seg', 'rec_B_seg']
 		self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg
 		# specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
-		if self.isTrain:
-			self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
+		if self.isTrain:									#isTrain：True时表示是执行了train.py，否则执行了test.py
+			self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']	#isTrain为True时，保存生成器和判别器
 		else:
-			self.model_names = ['G_A', 'G_B']
+			self.model_names = ['G_A', 'G_B']				#isTrain为False时，只保存生成器
 
 		# load/define networks
 		# The naming conversion is different from those used in the paper
 		# Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-		self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+		self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)	# opt.norm默认是'instance'
 		self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 		if self.isTrain:
-			use_sigmoid = opt.no_lsgan
+			use_sigmoid = opt.no_lsgan	#why?为什么不使用lsgan，就表示用sigmoid？
 			self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 			self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 
