@@ -118,7 +118,7 @@ torch.cat(tmplist)
 # 为了理解select_masks_decreasing函数中的mean(-1)
 import torch
 
-path = "/Users/chenqy/PycharmProjects/instagan/datasets/shp2gir_coco/sampleA_seg/139_0.png"
+path = "/Users/chenqy/PycharmProjects/instagan/datasets/shp2gir_coco/trainA_seg/139_0.png"
 segs = []
 
 from PIL import Image

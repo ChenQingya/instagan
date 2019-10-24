@@ -90,17 +90,29 @@ class InstaGANModel(BaseModel):
 			raise NotImplementedError('Set order name [%s] is not recognized' % self.opt.set_order)
 
 	def select_masks_decreasing(self, segs_batch):
-		"""Select masks in decreasing order"""
+		"""Select masks in decreasing order"""	# 猜测是选取前四张大的seg，大的意思是：该seg像素点上的value，总平均值最大
 		ret = list()
-		for segs in segs_batch:					# 照理说segs_batch类似torch.Size([20, 200, 200])，segs类似torch.Size([1, 200, 200])，
-												# 此时下方mean类似torch.Size([1])，那么将无法计算mean.topk(4),因为根本不够4个！
-			mean = segs.mean(-1).mean(-1)		# 这里做了两次mean处理，都是在最后一维进行处理，
+		for segs in segs_batch:					# 错误理解：
+												# 	照理说segs_batch类似torch.Size([20, 200, 200])，segs类似torch.Size([1, 200, 200])，
+												# 	此时下方mean类似torch.Size([1])，那么将无法计算mean.topk(4),因为根本不够4个！
+												# 实际debug:
+												# 	查看segs_batch的size是torch.Size([1, 20, 200, 200])，
+												# 	则segs的size是torch.Size([20, 200, 200])
+
+			mean = segs.mean(-1).mean(-1)		# mean的size是torch.Size([20])
+												# 这里做了两次mean处理，都是在最后一维进行处理，
 												# ps. torch.mean():
 												# 	具体可看/Users/chenqy/PycharmProjects/instagan/data/seg_understanding.py
 												# 	或者看/instagan/models/torchmean_understanding.py
-			m, i = mean.topk(self.opt.ins_max)	# '--ins_max', type=int, default=4, help='maximum number of instances to forward'
-			ret.append(segs[i, :, :])
-		return torch.stack(ret)
+
+			m, i = mean.topk(self.opt.ins_max)	# m是：tensor([-0.7352, -0.7675, -1.0000, -1.0000])，大小是torch.Size([4])。
+												# i是tensor([0, 1, 5, 3])，大小是torch.Size([4]),i可能表示前四个大的seg的索引
+												# '--ins_max', type=int, default=4, help='maximum number of instances to forward'
+
+			ret.append(segs[i, :, :])			# ret大小是torch.Size([4, 200, 200])
+
+		return torch.stack(ret)					# torch.stack表示在新的dim上concatenate。
+												# 返回的是torch.Size([1, 4, 200, 200])
 
 	def select_masks_random(self, segs_batch):
 		"""Select masks in random order"""
@@ -134,20 +146,25 @@ class InstaGANModel(BaseModel):
 	# input是数据集实例（类UnalignedSegDataset的实例）
 	def set_input(self, input):
 		AtoB = self.opt.direction == 'AtoB'
-		# input is the datasets, we use input[idx]to get the item.
-		# eg.input['A'] or input['B'] or input['A_segs'] or input['B_segs']
-		# refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
-		self.real_A_img = input['A' if AtoB else 'B'].to(self.device)
+																			# input is the datasets, we use input[idx]to get the item.
+																			# eg.input['A'] or input['B'] or input['A_segs'] or input['B_segs']
+																			# refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
+		self.real_A_img = input['A' if AtoB else 'B'].to(self.device)		# self.real_A_img的shape是torch.Size([1, 3, 200, 200])，一张原图，3通道
 		self.real_B_img = input['B' if AtoB else 'A'].to(self.device)
-		real_A_segs = input['A_segs' if AtoB else 'B_segs']	# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs，所有segs拼接使用cat函数
+
+		real_A_segs = input['A_segs' if AtoB else 'B_segs']					# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs，所有segs拼接使用cat函数
 		real_B_segs = input['B_segs' if AtoB else 'A_segs']
-		self.real_A_segs = self.select_masks(real_A_segs).to(self.device)
+
+		self.real_A_segs = self.select_masks(real_A_segs).to(self.device)	# self.real_A_segs的shape是torch.Size([1, 4, 200, 200]),四张seg
 		self.real_B_segs = self.select_masks(real_B_segs).to(self.device)
-		self.real_A = torch.cat([self.real_A_img, self.real_A_segs], dim=1)
+
+		self.real_A = torch.cat([self.real_A_img, self.real_A_segs], dim=1)	# self.real_A的shape是torch.Size([1, 7, 200, 200])，融合了一张原图和四张seg
 		self.real_B = torch.cat([self.real_B_img, self.real_B_segs], dim=1)
-		self.real_A_seg = self.merge_masks(self.real_A_segs)  # merged mask
-		self.real_B_seg = self.merge_masks(self.real_B_segs)  # merged mask
-		self.image_paths = input['A_paths' if AtoB else 'B_paths']
+
+		self.real_A_seg = self.merge_masks(self.real_A_segs)  				# merged mask，Merge masks (B, N, W, H) -> (B, 1, W, H)# self.real_A_seg的shape是torch.Size([1, 1, 200, 200])，相当于将其压缩，将7压缩为1
+		self.real_B_seg = self.merge_masks(self.real_B_segs)
+
+		self.image_paths = input['A_paths' if AtoB else 'B_paths']			# A_paths是一个list，但是其长度为1，值为'./datasets/shp2gir_coco/trainA/788.png'
 
 	def forward(self, idx=0):
 		N = self.opt.ins_per

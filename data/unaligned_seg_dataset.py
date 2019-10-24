@@ -19,13 +19,13 @@ class UnalignedSegDataset(BaseDataset):
 		self.opt = opt
 		self.root = opt.dataroot
 		# `phase`就是对应例如`edges2shoes`文件夹下的子文件的名称（这里没有edges2shoes），这里选择`val`
-		self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')# eg. self.dir_A is "datasets/shp2gir_coco/sampleA"
-		self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')# eg. self.dir_A is "datasets/shp2gir_coco/sampleB"
+		self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')# eg. self.dir_A is "datasets/shp2gir_coco/trainA"
+		self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')# eg. self.dir_A is "datasets/shp2gir_coco/trainB"
 		self.max_instances = 20  # default: 20
 		self.seg_dir = 'seg'  # default: 'seg'
 
 		# eg. obtain all the images' paths of
-		# "datasets/shp2gir_coco/sampleA" or "datasets/shp2gir_coco/sampleB"
+		# "datasets/shp2gir_coco/trainA" or "datasets/shp2gir_coco/trainB"
 		self.A_paths = sorted(make_dataset(self.dir_A))
 		self.B_paths = sorted(make_dataset(self.dir_B))
 		self.A_size = len(self.A_paths)
@@ -122,8 +122,8 @@ class UnalignedSegDataset(BaseDataset):
 			B = tmp.unsqueeze(0)
 
 		# 注意，一张图对应一组seg
-		# eg. return an image of domain A in "datasets/shp2gir_coco/sampleA" and its idx and its a batch of segs and its path
-		# eg. and return an image of domain A in "datasets/shp2gir_coco/sampleA" and its idx and its a batch of  segs and its path
+		# eg. return an image of domain A in "datasets/shp2gir_coco/trainA" and its idx and its a batch of segs and its path
+		# eg. and return an image of domain A in "datasets/shp2gir_coco/trainA" and its idx and its a batch of  segs and its path
 		return {'A': A, 'B': B,
 				'A_idx': A_idx, 'B_idx': B_idx,
 				'A_segs': A_segs, 'B_segs': B_segs,

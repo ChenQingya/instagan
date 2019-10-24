@@ -13,11 +13,11 @@ class UnalignedDataset(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot
-        self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')# eg. self.dir_A is "datasets/shp2gir_coco/sampleA"
-        self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')# eg. self.dir_A is "datasets/shp2gir_coco/sampleB"
+        self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')# eg. self.dir_A is "datasets/shp2gir_coco/trainA"
+        self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')# eg. self.dir_A is "datasets/shp2gir_coco/trainB"
 
         # eg. obtain all the images' paths of
-        # "datasets/shp2gir_coco/sampleA" or "datasets/shp2gir_coco/sampleB"
+        # "datasets/shp2gir_coco/trainA" or "datasets/shp2gir_coco/trainB"
         self.A_paths = make_dataset(self.dir_A)
         self.B_paths = make_dataset(self.dir_B)
 
@@ -58,8 +58,8 @@ class UnalignedDataset(BaseDataset):
         if output_nc == 1:  # RGB to gray
             tmp = B[0, ...] * 0.299 + B[1, ...] * 0.587 + B[2, ...] * 0.114
             B = tmp.unsqueeze(0)
-        # eg. return an image of domain A in "datasets/shp2gir_coco/sampleA" and its path
-        # eg. and return an image of domain A in "datasets/shp2gir_coco/sampleA" and its path
+        # eg. return an image of domain A in "datasets/shp2gir_coco/trainA" and its path
+        # eg. and return an image of domain A in "datasets/shp2gir_coco/trainA" and its path
         return {'A': A, 'B': B,
                 'A_paths': A_path, 'B_paths': B_path}
 
