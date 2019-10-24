@@ -42,7 +42,7 @@ class UnalignedSegDataset(BaseDataset):
 		# max_instances means an image and its many segs
 		# (the number of segs is not more than max_instances)
 		# the image and its segs are as input of the model
-		for i in range(self.max_instances):
+		for i in range(self.max_instances):							# self.max_instances = 20  # default: 20
 			# eg. seg_path is "datasets/trainA_seg/0.png"
 			# then path is "datasets/trainA_seg/0_0.png" or "datasets/trainA_seg/0_1.png" etc.
 			path = seg_path.replace('.png', '_{}.png'.format(i))
@@ -53,13 +53,16 @@ class UnalignedSegDataset(BaseDataset):
 				# refer:https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.convert
 				seg = Image.open(path).convert('L')
 				# 转成固定大小的seg
-				seg = self.fixed_transform(seg, seed)
+				seg = self.fixed_transform(seg, seed)	# 经过transform后，seg已经是tensor了。
+														# PIL image会转成Tensor，从（C*H*W）到（H*W*C），且从[0,255]到[0.0,1.0]。
 				segs.append(seg)
 			# if not exist，有些seg并不存在，因为是依据序号遍历，所以可能有不存在的seg
 			else:
 				# 若不存在，则生成的seg每个像素的值为-1
 				segs.append(-torch.ones(segs[0].size()))
-		# 将所有segs拼接 cat函数
+		# 将所有segs拼接用cat函数,
+		# N默认是20个。N个seg(H,W)的拼接结果：Tensor(N,H,W）,如：从torch.Size([200, 200])变成torch.Size([20, 200, 200])
+		# 具体看cat可看examples/fast_neural_style/neural_style/torchcat_understanding.py
 		return torch.cat(segs)
 
 	# Map-style datasets,A map-style dataset is one that implements
@@ -101,7 +104,7 @@ class UnalignedSegDataset(BaseDataset):
 		B = self.fixed_transform(B, seed)
 
 		#get 一组segs by A_seg_path
-		A_segs = self.read_segs(A_seg_path, seed)
+		A_segs = self.read_segs(A_seg_path, seed)	# A_segs大小 : 类似torch.Size([3, 200, 200])，其中3为seg的个数，200*200是宽高
 		B_segs = self.read_segs(B_seg_path, seed)
 
 		if self.opt.direction == 'BtoA':

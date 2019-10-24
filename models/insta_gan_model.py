@@ -92,9 +92,13 @@ class InstaGANModel(BaseModel):
 	def select_masks_decreasing(self, segs_batch):
 		"""Select masks in decreasing order"""
 		ret = list()
-		for segs in segs_batch:
-			mean = segs.mean(-1).mean(-1)
-			m, i = mean.topk(self.opt.ins_max)
+		for segs in segs_batch:					# 照理说segs_batch类似torch.Size([20, 200, 200])，segs类似torch.Size([1, 200, 200])，
+												# 此时下方mean类似torch.Size([1])，那么将无法计算mean.topk(4),因为根本不够4个！
+			mean = segs.mean(-1).mean(-1)		# 这里做了两次mean处理，都是在最后一维进行处理，
+												# ps. torch.mean():
+												# 	具体可看/Users/chenqy/PycharmProjects/instagan/data/seg_understanding.py
+												# 	或者看/instagan/models/torchmean_understanding.py
+			m, i = mean.topk(self.opt.ins_max)	# '--ins_max', type=int, default=4, help='maximum number of instances to forward'
 			ret.append(segs[i, :, :])
 		return torch.stack(ret)
 
@@ -135,7 +139,7 @@ class InstaGANModel(BaseModel):
 		# refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
 		self.real_A_img = input['A' if AtoB else 'B'].to(self.device)
 		self.real_B_img = input['B' if AtoB else 'A'].to(self.device)
-		real_A_segs = input['A_segs' if AtoB else 'B_segs']	# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs
+		real_A_segs = input['A_segs' if AtoB else 'B_segs']	# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs，所有segs拼接使用cat函数
 		real_B_segs = input['B_segs' if AtoB else 'A_segs']
 		self.real_A_segs = self.select_masks(real_A_segs).to(self.device)
 		self.real_B_segs = self.select_masks(real_B_segs).to(self.device)
