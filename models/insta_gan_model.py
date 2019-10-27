@@ -109,7 +109,7 @@ class InstaGANModel(BaseModel):
 												# i是tensor([0, 1, 5, 3])，大小是torch.Size([4]),i可能表示前四个大的seg的索引
 												# '--ins_max', type=int, default=4, help='maximum number of instances to forward'
 
-			ret.append(segs[i, :, :])			# ret大小是torch.Size([4, 200, 200])
+			ret.append(segs[i, :, :])			# ret是list，其中每个元素shape是torch.Size([4, 200, 200])
 
 		return torch.stack(ret)					# torch.stack表示在新的dim上concatenate。
 												# 返回的是torch.Size([1, 4, 200, 200])
@@ -118,11 +118,11 @@ class InstaGANModel(BaseModel):
 		"""Select masks in random order"""
 		ret = list()
 		for segs in segs_batch:
-			mean = (segs + 1).mean(-1).mean(-1)
+			mean = (segs + 1).mean(-1).mean(-1)	# torch.Size([20])
 			m, i = mean.topk(self.opt.ins_max)
-			num = min(len(mean.nonzero()), self.opt.ins_max)
-			reorder = np.concatenate((np.random.permutation(num), np.arange(num, self.opt.ins_max)))
-			ret.append(segs[i[reorder], :, :])
+			num = min(len(mean.nonzero()), self.opt.ins_max)	# num = {int}2
+			reorder = np.concatenate((np.random.permutation(num), np.arange(num, self.opt.ins_max)))	# reorder = {ndarry}[0 1 2 3]
+			ret.append(segs[i[reorder], :, :])	# ret是list，其中每个元素shape是torch.Size([4, 200, 200])
 		return torch.stack(ret)
 
 	def merge_masks(self, segs):
