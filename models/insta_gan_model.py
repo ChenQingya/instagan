@@ -60,7 +60,7 @@ class InstaGANModel(BaseModel):
 			self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 
 		if self.isTrain:
-			self.fake_A_pool = ImagePool(opt.pool_size)
+			self.fake_A_pool = ImagePool(opt.pool_size)	# '--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images'
 			self.fake_B_pool = ImagePool(opt.pool_size)
 			# define loss functions
 			self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
@@ -188,8 +188,10 @@ class InstaGANModel(BaseModel):
 			self.fake_B_sng = self.netG_A(self.real_A_sng)							# (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
 			self.rec_A_sng = self.netG_B(self.fake_B_sng)							# 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
 
-			self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)	# 生成的假的domain B的图:split分为domainB的假的img和假的seg。								# 暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
-			self.rec_A_img_sng, self.rec_A_seg_sng = self.split(self.rec_A_sng)		# reconstruct的domainA的图：split分为domainA的重构的img和假的seg。							# 暂定self.rec_A_img_sng用于计算IS（inception score）
+			self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)	# 生成的假的domain B的图:split分为domainB的假的img和假的seg。
+																					#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
+			self.rec_A_img_sng, self.rec_A_seg_sng = self.split(self.rec_A_sng)		# reconstruct的domainA的图：split分为domainA的重构的img和假的seg。
+																					#  暂定self.rec_A_img_sng用于计算IS（inception score）
 			fake_B_seg_list = self.fake_B_seg_list + [self.fake_B_seg_sng]  		# not detach
 			for i in range(self.ins_iter - idx - 1):								# 总共需要增加几个seg？
 				fake_B_seg_list.append(empty)										# 为了使fake_B_seg_mul的大小与相同，所以增加一部分seg（这部分seg的每个像素为-1）
