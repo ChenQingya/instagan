@@ -41,7 +41,7 @@ class InstaGANModel(BaseModel):
 		visual_names_B_img = ['real_B_img', 'fake_A_img', 'rec_B_img']
 		visual_names_A_seg = ['real_A_seg', 'fake_B_seg', 'rec_A_seg']
 		visual_names_B_seg = ['real_B_seg', 'fake_A_seg', 'rec_B_seg']
-		self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg
+		self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
 
 		# specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
 		if self.isTrain:													#isTrain：True时表示是执行了train.py，否则执行了test.py
@@ -237,7 +237,7 @@ class InstaGANModel(BaseModel):
 			self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
 			self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
 
-			# save visuals
+			# save visuals													# 保存生成的图片，包括fake和reconstruct
 			if i == 0:  # first
 				self.rec_A_img = self.rec_A_img_sng
 				self.rec_B_img = self.rec_B_img_sng
