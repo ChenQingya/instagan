@@ -3,13 +3,14 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+from . import networks_Densenet
 import numpy as np
 import copy
 
 
-class InstaGANModel(BaseModel):
+class DenseGANModel(BaseModel):
 	def name(self):
-		return 'InstaGANModel'
+		return 'DenseGANModel'
 
 	@staticmethod
 	def modify_commandline_options(parser, is_train=True):
@@ -52,18 +53,18 @@ class InstaGANModel(BaseModel):
 		# load/define networks
 		# The naming conversion is different from those used in the paper
 		# Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-		self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)	# opt.norm默认是'instance'
-		self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+		self.netG_A = networks_Densenet.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(6, 12, 24, 16),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)	# opt.norm默认是'instance'
+		self.netG_B = networks_Densenet.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(6, 12, 24, 16),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)
 		if self.isTrain:
 			use_sigmoid = opt.no_lsgan	#why?为什么不使用lsgan，就表示用sigmoid？
-			self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
-			self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
+			self.netD_A = networks_Densenet.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
+			self.netD_B = networks_Densenet.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 
 		if self.isTrain:
 			self.fake_A_pool = ImagePool(opt.pool_size)	# '--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images'
 			self.fake_B_pool = ImagePool(opt.pool_size)
 			# define loss functions
-			self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
+			self.criterionGAN = networks_Densenet.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
 			self.criterionCyc = torch.nn.L1Loss()
 			self.criterionIdt = torch.nn.L1Loss()
 
@@ -184,9 +185,11 @@ class InstaGANModel(BaseModel):
 
 		# forward A
 		if self.forward_A:
-			self.real_A_sng = torch.cat([self.real_A_img_sng, self.real_A_seg_sng], dim=1)
-			self.fake_B_sng = self.netG_A(self.real_A_sng)							# (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
+			self.real_A_sng = torch.cat([self.real_A_img_sng, self.real_A_seg_sng], dim=1)	# real_A_sng:torch.Size([1, 5, 224, 224])
+			self.fake_B_sng = self.netG_A(self.real_A_sng)							# (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器,self.real_A_seg:torch.Size([1, 1, 200, 200])
+																					# 出错：torch.Size([1, 9, 224, 224])
 			self.rec_A_sng = self.netG_B(self.fake_B_sng)							# 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+																					# 出错：self.rec_A_sngtorch.Size([1, 21, 224, 224])
 
 			self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)	# 生成的假的domain B的图:split分为domainB的假的img和假的seg。
 																					#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
