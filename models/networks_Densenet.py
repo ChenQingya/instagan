@@ -1103,7 +1103,6 @@ class DensenetSetGenerator(nn.Module):
         self.maxpool0 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.dense_ngf = self.get_dense_ngf(growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes)
-        # self.convTran0 = nn.ConvTranspose2d()
 
         self.decoder_convTran_dict = OrderedDict()
         self.decoder_norm_dict = OrderedDict()
@@ -1117,7 +1116,6 @@ class DensenetSetGenerator(nn.Module):
         self.get_dense_decoder = self.set_dense_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes, num_times=2)
         self.get_dense_decoder_seg =  self.set_dense_decoder_seg(output_nc, n_downsampling, ngf, norm_layer, use_bias, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes, num_times=3)
 
-        # self.decoder_convTran1 = nn.ConvTranspose2d(int(self.dense_ngf * 2),int(self.dense_ngf),kernel_size=3, stride=2,padding=1, output_padding=1,bias=use_bias)
 
         self.reflec = nn.ReflectionPad2d(3)
         self.convlast = nn.Conv2d(self.last_dense_ngf, output_nc, kernel_size=7, padding=0)
@@ -1180,28 +1178,7 @@ class DensenetSetGenerator(nn.Module):
     def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes):
         # First convolution
         model =[]
-        # model += [nn.Conv2d(input_nc, num_init_features, kernel_size=7, stride=2,padding=3, bias=False)]    # 这里的num_init_features和resnetGenerator中的ngf是一个意思
-        # model += [nn.BatchNorm2d(num_init_features)]
-        # model += [nn.ReLU(inplace=True)]
-        # model += [nn.MaxPool2d(kernel_size=3, stride=2, padding=1)]
 
-
-
-
-
-        # resnet-----------------------------------------------------
-        # model = [nn.ReflectionPad2d(3),
-        #          nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
-        #          norm_layer(ngf),
-        #          nn.ReLU(True)]
-        # for i in range(n_downsampling):
-        #     mult = 2 ** i
-        #     model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
-        #               norm_layer(ngf * mult * 2),
-        #               nn.ReLU(True)]
-        # resnet-----------------------------------------------------
-
-        mult = 2 ** n_downsampling
 
         # Each denseblock
         num_features = num_init_features
@@ -1217,10 +1194,6 @@ class DensenetSetGenerator(nn.Module):
                 model += trans
                 num_features = num_features // 2
 
-
-        # for i in range(n_blocks):
-            # model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
-            # model += [DensenetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,use_bias=use_bias, growth_rate=growth_rate, block_config=block_config, num_init_features=num_init_features,bn_size=bn_size, drop_rate=drop_rate, num_classes=num_classes)]
 
         return nn.Sequential(*model)
 
@@ -1238,32 +1211,15 @@ class DensenetSetGenerator(nn.Module):
         dense_downsampling=5    # 因为缩小了5倍
 
         for i in range(dense_downsampling):
-            # mult = 2**(n_downsampling - i)
             model += [nn.ConvTranspose2d(int(dense_ngf*2), int(dense_ngf), kernel_size=3, stride=2, padding=1, output_padding=1, bias=use_bias),
-                      # norm_layer(int(ngf * mult / 2)),
                       norm_layer(int(dense_ngf)),
                       nn.ReLU(True)]
-            # self.decoder_convTran_dict['decoder_convTran%d'% (i + 1)] = nn.ConvTranspose2d(int(dense_ngf*2), int(dense_ngf), kernel_size=3, stride=2, padding=1, output_padding=1, bias=use_bias)
-            # self.decoder_norm_dict['decoder_norm%d'%(i+1)] = norm_layer(int(dense_ngf))
-            # self.decoder_relu_dict['decoder_relu%d'%(i+1)] = nn.ReLU(True)
-
             dense_ngf=dense_ngf//2
 
 
-        # resnetdecoder----------------------------------
-        # for i in range(n_downsampling):
-        #     mult = 2**(n_downsampling - i)
-        #     model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=2, padding=1, output_padding=1, bias=use_bias),
-        #               norm_layer(int(ngf * mult / 2)),
-        #               nn.ReLU(True)]
-        # resnetdecoder----------------------------------
-
         model += [nn.ReflectionPad2d(3)]
-        # self.reflec = nn.ReflectionPad2d(3)
         model += [nn.Conv2d(dense_ngf, output_nc, kernel_size=7, padding=0)]
-        # self.convlast = nn.Conv2d(dense_ngf, output_nc, kernel_size=7, padding=0)
         model += [nn.Tanh()]
-        # self.tanh = nn.Tanh()
 
         return nn.Sequential(*model)
 
@@ -1335,8 +1291,6 @@ class DensenetSetGenerator(nn.Module):
                 enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
                 idx += 1  # move to next index
                 feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)   # feat:torch.Size([1, 3072, 7, 7])
-                # out += [self.decoder_seg(feat)]
-
 
                 decoder_convTran1_out = self.decoder_convTran_dict_seg['decoder_convTran1'](feat)
                 decoder_norm1_out = self.decoder_norm_dict_seg['decoder_norm1'](decoder_convTran1_out)
