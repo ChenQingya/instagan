@@ -207,11 +207,12 @@ class ResnetGenerator(nn.Module):   # 使用resnet作为生成器的backbone net
         else:
             use_bias = norm_layer == nn.InstanceNorm2d      # 不是偏函数
 
-        model = [nn.ReflectionPad2d(3),                     # 加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
+        model = [nn.ReflectionPad2d(3),     # [1,3,206,206]
+                                                            #  加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
                  nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0,
-                           bias=use_bias),
-                 norm_layer(ngf),
-                 nn.ReLU(True)]
+                           bias=use_bias),  # [1,64,200,200]
+                 norm_layer(ngf),           # [1,64,200,200]instancenorm的输出大小与输入相同
+                 nn.ReLU(True)]             # [1,64,200,200]与输入相同
 
         n_downsampling = 2
         for i in range(n_downsampling):
@@ -260,8 +261,8 @@ class ResnetSetGenerator(nn.Module):
         n_downsampling = 2
         self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
         self.encoder_seg = self.get_encoder(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)  # 2*ngf
-        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 3*ngf
+        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)   # 2*ngf,此时新的ngf变成128
+        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)           # 3*ngf,因为输入的channel大小是3倍
 
     def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias):
         model = [nn.ReflectionPad2d(3),
@@ -295,34 +296,35 @@ class ResnetSetGenerator(nn.Module):
 
     def forward(self, inp):
         # split data
-        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
-        mean = (segs + 1).mean(0).mean(-1).mean(-1)
+        img = inp[:, :self.input_nc, :, :]              # (B, CX, W, H) img:torch.Size([1, 3, 200, 200])
+        segs = inp[:, self.input_nc:, :, :]             # (B, CA, W, H) segs:torch.Size([1, 2, 200, 200])
+        mean = (segs + 1).mean(0).mean(-1).mean(-1)     # mean:torch.Size([2]) mean = {Tensor}tensor([0.0523, 0.0469], device='cuda:0')
         if mean.sum() == 0:
             mean[0] = 1  # forward at least one segmentation
 
         # run encoder
-        enc_img = self.encoder_img(img)
+        enc_img = self.encoder_img(img)                             # enc_img:torch.Size([1, 256, 50, 50]) encoder没有改变ｘ[1,256,50,50]的大小
         enc_segs = list()
         for i in range(segs.size(1)):
-            if mean[i] > 0:  # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)
-                enc_segs.append(self.encoder_seg(seg))
+            if mean[i] > 0:                                         # skip empty segmentation
+                seg = segs[:, i, :, :].unsqueeze(1)                 # seg:torch.Size([1, 1, 200, 200])
+                enc_segs.append(self.encoder_seg(seg))              # self.encoder_seg(seg)的结果torch.Size([1, 256, 50, 50]),总共append两次
         enc_segs = torch.cat(enc_segs)
-        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
+        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)     # enc_segs_sum:torch.Size([1, 256, 50, 50])
+                                                                    #  aggregated set feature
 
         # run decoder
-        feat = torch.cat([enc_img, enc_segs_sum], dim=1)
+        feat = torch.cat([enc_img, enc_segs_sum], dim=1)            # feat:torch.Size([1, 512, 50, 50])
         out = [self.decoder_img(feat)]
         idx = 0
         for i in range(segs.size(1)):
             if mean[i] > 0:
-                enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
+                enc_seg = enc_segs[idx].unsqueeze(0)                # (1, ngf, w, h)
                 idx += 1  # move to next index
                 feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
                 out += [self.decoder_seg(feat)]
             else:
-                out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
+                out += [segs[:, i, :, :].unsqueeze(1)]              # skip empty segmentation
         return torch.cat(out, dim=1)
 
 
@@ -365,8 +367,8 @@ class ResnetBlock(nn.Module):
         return nn.Sequential(*conv_block)
 
     def forward(self, x):
-        out = x + self.conv_block(x)
-        return out
+        out = x + self.conv_block(x)    # x:torch.Size([1, 256, 50, 50])
+        return out                      # out:torch.Size([1, 256, 50, 50])
 
 
 # Defines the Unet generator.
