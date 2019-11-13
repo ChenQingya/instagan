@@ -915,7 +915,7 @@ class _Transition(nn.Sequential):
         self.add_module('relu', nn.ReLU(inplace=True))
         self.add_module('conv', nn.Conv2d(num_input_features, num_output_features,
                                           kernel_size=1, stride=1, bias=False))
-        self.add_module('pool', nn.AvgPool2d(kernel_size=2, stride=2))
+        # self.add_module('pool', nn.AvgPool2d(kernel_size=2, stride=2))    # 不avgpool，使图片大小不变
 
 
 # Densenet Block的子模块_DenseBlock
@@ -1126,18 +1126,15 @@ class DensenetSetGenerator(nn.Module):
 
     def get_dense_ngf(self, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes):
         num_features = num_init_features
-        for i, num_layers in enumerate(block_config):
-            if i != (len(block_config) - 1):  # i不是最后一个
-                num_features = (num_features + num_layers * growth_rate) // 2
-            else:
-                num_features = (num_features + num_layers * growth_rate)
+        for i, num_layers in enumerate(block_config):   # 其实每个block后，通道数都变为(num_init_features + num_layers * growth_rate)
+            num_features = (num_init_features + num_layers * growth_rate)
 
         dense_ngf = num_features
         return dense_ngf
 
     def set_dense_decoder(self, output_nc, n_downsampling, ngf, norm_layer, use_bias, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes, num_times):
         dense_ngf = self.get_dense_ngf(growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes)
-        dense_downsampling = 5  # 因为缩小了5倍
+        dense_downsampling = 2  # 因为缩小了5倍
         for i in range(dense_downsampling):
             self.decoder_convTran_dict['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),int(dense_ngf),kernel_size=3, stride=2,padding=1, output_padding=1,bias=use_bias).type(self.dtype)
             self.decoder_norm_dict['decoder_norm%d' % (i + 1)] = norm_layer(int(dense_ngf)).type(self.dtype)
@@ -1148,7 +1145,7 @@ class DensenetSetGenerator(nn.Module):
 
     def set_dense_decoder_seg(self, output_nc, n_downsampling, ngf, norm_layer, use_bias, growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes, num_times):    # seg TODO
         dense_ngf = self.get_dense_ngf(growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes)
-        dense_downsampling = 5  # 因为缩小了5倍
+        dense_downsampling = 2  # 因为缩小了5倍，改为上采样两次
         for i in range(dense_downsampling):
             if i==0:
                 self.decoder_convTran_dict_seg['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),
@@ -1188,11 +1185,13 @@ class DensenetSetGenerator(nn.Module):
                                 drop_rate=drop_rate)
             model += block
             num_features = num_features + num_layers * growth_rate
+
+            # 使用没有avgpool的transition，保持经过denseblock后，输入的通道和大小都不变
             if i != len(block_config) - 1:
                 trans = _Transition(num_input_features=num_features,
-                                    num_output_features=num_features // 2)
+                                    num_output_features=num_features // 4)  # 256/4=64,64是初始通道，256是经过一个block后得到的升了的channel
                 model += trans
-                num_features = num_features // 2
+                num_features = num_features // 4
 
 
         return nn.Sequential(*model)
@@ -1264,19 +1263,19 @@ class DensenetSetGenerator(nn.Module):
         decoder_norm2_out = self.decoder_norm_dict['decoder_norm2'](decoder_convTran2_out)
         decoder_relu2_out = self.decoder_relu_dict['decoder_relu2'](decoder_norm2_out)
 
-        decoder_convTran3_out = self.decoder_convTran_dict['decoder_convTran3'](decoder_relu2_out)
-        decoder_norm3_out = self.decoder_norm_dict['decoder_norm3'](decoder_convTran3_out)
-        decoder_relu3_out = self.decoder_relu_dict['decoder_relu3'](decoder_norm3_out)
+        # decoder_convTran3_out = self.decoder_convTran_dict['decoder_convTran3'](decoder_relu2_out)
+        # decoder_norm3_out = self.decoder_norm_dict['decoder_norm3'](decoder_convTran3_out)
+        # decoder_relu3_out = self.decoder_relu_dict['decoder_relu3'](decoder_norm3_out)
+        #
+        # decoder_convTran4_out = self.decoder_convTran_dict['decoder_convTran4'](decoder_relu3_out)
+        # decoder_norm4_out = self.decoder_norm_dict['decoder_norm4'](decoder_convTran4_out)
+        # decoder_relu4_out = self.decoder_relu_dict['decoder_relu4'](decoder_norm4_out)
+        #
+        # decoder_convTran5_out = self.decoder_convTran_dict['decoder_convTran5'](decoder_relu4_out)
+        # decoder_norm5_out = self.decoder_norm_dict['decoder_norm5'](decoder_convTran5_out)
+        # decoder_relu5_out = self.decoder_relu_dict['decoder_relu5'](decoder_norm5_out)
 
-        decoder_convTran4_out = self.decoder_convTran_dict['decoder_convTran4'](decoder_relu3_out)
-        decoder_norm4_out = self.decoder_norm_dict['decoder_norm4'](decoder_convTran4_out)
-        decoder_relu4_out = self.decoder_relu_dict['decoder_relu4'](decoder_norm4_out)
-
-        decoder_convTran5_out = self.decoder_convTran_dict['decoder_convTran5'](decoder_relu4_out)
-        decoder_norm5_out = self.decoder_norm_dict['decoder_norm5'](decoder_convTran5_out)
-        decoder_relu5_out = self.decoder_relu_dict['decoder_relu5'](decoder_norm5_out)
-
-        reflec_out = self.reflec(decoder_relu5_out)
+        reflec_out = self.reflec(decoder_relu2_out)
         convlast_out = self.convlast(reflec_out)
         tanh_out = self.tanh(convlast_out)
 
@@ -1300,20 +1299,20 @@ class DensenetSetGenerator(nn.Module):
                 decoder_norm2_out = self.decoder_norm_dict_seg['decoder_norm2'](decoder_convTran2_out)
                 decoder_relu2_out = self.decoder_relu_dict_seg['decoder_relu2'](decoder_norm2_out)
 
-                decoder_convTran3_out = self.decoder_convTran_dict_seg['decoder_convTran3'](decoder_relu2_out)
-                decoder_norm3_out = self.decoder_norm_dict_seg['decoder_norm3'](decoder_convTran3_out)
-                decoder_relu3_out = self.decoder_relu_dict_seg['decoder_relu3'](decoder_norm3_out)
+                # decoder_convTran3_out = self.decoder_convTran_dict_seg['decoder_convTran3'](decoder_relu2_out)
+                # decoder_norm3_out = self.decoder_norm_dict_seg['decoder_norm3'](decoder_convTran3_out)
+                # decoder_relu3_out = self.decoder_relu_dict_seg['decoder_relu3'](decoder_norm3_out)
+                #
+                # decoder_convTran4_out = self.decoder_convTran_dict_seg['decoder_convTran4'](decoder_relu3_out)
+                # decoder_norm4_out = self.decoder_norm_dict_seg['decoder_norm4'](decoder_convTran4_out)
+                # decoder_relu4_out = self.decoder_relu_dict_seg['decoder_relu4'](decoder_norm4_out)
+                #
+                # decoder_convTran5_out = self.decoder_convTran_dict_seg['decoder_convTran5'](decoder_relu4_out)
+                # decoder_norm5_out = self.decoder_norm_dict_seg['decoder_norm5'](decoder_convTran5_out)
+                # decoder_relu5_out = self.decoder_relu_dict_seg['decoder_relu5'](decoder_norm5_out)
 
-                decoder_convTran4_out = self.decoder_convTran_dict_seg['decoder_convTran4'](decoder_relu3_out)
-                decoder_norm4_out = self.decoder_norm_dict_seg['decoder_norm4'](decoder_convTran4_out)
-                decoder_relu4_out = self.decoder_relu_dict_seg['decoder_relu4'](decoder_norm4_out)
 
-                decoder_convTran5_out = self.decoder_convTran_dict_seg['decoder_convTran5'](decoder_relu4_out)
-                decoder_norm5_out = self.decoder_norm_dict_seg['decoder_norm5'](decoder_convTran5_out)
-                decoder_relu5_out = self.decoder_relu_dict_seg['decoder_relu5'](decoder_norm5_out)
-
-
-                reflec_out = self.reflec(decoder_relu5_out)
+                reflec_out = self.reflec(decoder_relu2_out)
                 convlast_out = self.convlast_seg(reflec_out)    # 注意seg输出通道为1
                 tanh_out = self.tanh(convlast_out)
 
