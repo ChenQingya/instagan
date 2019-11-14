@@ -1189,9 +1189,9 @@ class DensenetSetGenerator(nn.Module):
             # 使用没有avgpool的transition，保持经过denseblock后，输入的通道和大小都不变
             if i != len(block_config) - 1:
                 trans = _Transition(num_input_features=num_features,
-                                    num_output_features=num_features // 2)  # 256/4=64,64是初始通道，256是经过一个block后得到的升了的channel
+                                    num_output_features=num_features // 4)  # 256/4=64,64是初始通道，256是经过一个block后得到的升了的channel
                 model += trans
-                num_features = num_features // 2
+                num_features = num_features // 4
 
 
         return nn.Sequential(*model)
