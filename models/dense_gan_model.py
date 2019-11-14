@@ -53,8 +53,8 @@ class DenseGANModel(BaseModel):
 		# load/define networks
 		# The naming conversion is different from those used in the paper
 		# Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-		self.netG_A = networks_Densenet.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(6, 6, 6, 6),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)	# opt.norm默认是'instance'
-		self.netG_B = networks_Densenet.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(6, 6, 6, 6),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)
+		self.netG_A = networks_Densenet.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(2, 2, 2, 2),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)	# opt.norm默认是'instance'
+		self.netG_B = networks_Densenet.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, growth_rate=32, block_config=(2, 2, 2, 2),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False)
 		if self.isTrain:
 			use_sigmoid = opt.no_lsgan	#why?为什么不使用lsgan，就表示用sigmoid？
 			self.netD_A = networks_Densenet.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)

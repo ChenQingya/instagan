@@ -1189,9 +1189,9 @@ class DensenetSetGenerator(nn.Module):
             # 使用没有avgpool的transition，保持经过denseblock后，输入的通道和大小都不变
             if i != len(block_config) - 1:
                 trans = _Transition(num_input_features=num_features,
-                                    num_output_features=num_features // 4)  # 256/4=64,64是初始通道，256是经过一个block后得到的升了的channel
+                                    num_output_features=num_features // 2)  # 256/4=64,64是初始通道，256是经过一个block后得到的升了的channel
                 model += trans
-                num_features = num_features // 4
+                num_features = num_features // 2
 
 
         return nn.Sequential(*model)
@@ -1236,7 +1236,7 @@ class DensenetSetGenerator(nn.Module):
         conv0_out=self.conv0(img)   # conv0_out:torch.Size([1, 64, 100, 100])
         norm0_out=self.norm0(conv0_out) # norm0_out:
         relu0_out=self.relu0(norm0_out)
-        maxpool0_out=self.maxpool0(relu0_out)
+        maxpool0_out=self.maxpool0(relu0_out)   # maxpool0_out:torch.Size([1, 64, 56, 56]),56表示原图的1/4
         enc_img = self.encoder_img(maxpool0_out) # enc_img:torch.Size([1, 1024, 6, 6])
 
         enc_segs = list()
