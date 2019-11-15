@@ -969,6 +969,27 @@ class DensenetBlock(nn.Module):
         out = self.dense_block(x)   # x:torch.Size([1, 256, 50, 50])
         return out
 
+class UpsampleConvLayer(torch.nn.Module):
+    """UpsampleConvLayer
+    Upsamples the input and then does a convolution. This method gives better results
+    compared to ConvTranspose2d.
+    ref: http://distill.pub/2016/deconv-checkerboard/
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride, upsample=None):
+        super(UpsampleConvLayer, self).__init__()
+        self.upsample = upsample
+        reflection_padding = kernel_size // 2
+        self.reflection_pad = torch.nn.ReflectionPad2d(reflection_padding)
+        self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride)
+
+    def forward(self, x):
+        x_in = x
+        if self.upsample:
+            x_in = torch.nn.functional.interpolate(x_in, mode='nearest', scale_factor=self.upsample)
+        out = self.reflection_pad(x_in)
+        out = self.conv2d(out)
+        return out
 
 class DensenetGenerator(nn.Module):   # 使用densenet作为生成器的backbone net
     def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=9, padding_type='reflect', growth_rate=32, block_config=(6, 12, 24, 16),num_init_features=64, bn_size=4, drop_rate=0, num_classes=1000, memory_efficient=False):
@@ -1136,7 +1157,9 @@ class DensenetSetGenerator(nn.Module):
         dense_ngf = self.get_dense_ngf(growth_rate, block_config, num_init_features, bn_size, drop_rate, num_classes)
         dense_downsampling = 2  # 因为缩小了5倍
         for i in range(dense_downsampling):
-            self.decoder_convTran_dict['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),int(dense_ngf),kernel_size=3, stride=2,padding=1, output_padding=1,bias=use_bias).type(self.dtype)
+            # self.decoder_convTran_dict['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),int(dense_ngf),kernel_size=3, stride=2,padding=1, output_padding=1,bias=use_bias).type(self.dtype)
+
+            self.decoder_convTran_dict['decoder_convTran%d' % (i + 1)] = UpsampleConvLayer(int(dense_ngf * num_times),int(dense_ngf), kernel_size=3, stride=1, upsample=2).type(self.dtype)
             self.decoder_norm_dict['decoder_norm%d' % (i + 1)] = norm_layer(int(dense_ngf)).type(self.dtype)
             self.decoder_relu_dict['decoder_relu%d' % (i + 1)] = nn.ReLU(True).type(self.dtype)
             if i!= (dense_downsampling-1):
@@ -1148,13 +1171,16 @@ class DensenetSetGenerator(nn.Module):
         dense_downsampling = 2  # 因为缩小了5倍，改为上采样两次
         for i in range(dense_downsampling):
             if i==0:
-                self.decoder_convTran_dict_seg['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),
-                                                                                                    int(dense_ngf),
-                                                                                                    kernel_size=3,
-                                                                                                    stride=2, padding=1,
-                                                                                                    output_padding=1,
-                                                                                                    bias=use_bias).type(
-                    self.dtype)
+                # self.decoder_convTran_dict_seg['decoder_convTran%d' % (i + 1)] = nn.ConvTranspose2d(int(dense_ngf * num_times),
+                #                                                                                    int(dense_ngf),
+                #                                                                                    kernel_size=3,
+                #                                                                                    stride=2, padding=1,
+                #                                                                                    output_padding=1,
+                #                                                                                    bias=use_bias).type(
+                #    self.dtype)
+
+                self.decoder_convTran_dict_seg['decoder_convTran%d' % (i + 1)] = UpsampleConvLayer(
+                    int(dense_ngf * num_times), int(dense_ngf), kernel_size=3, stride=1, upsample=2).type(self.dtype)
                 self.decoder_norm_dict_seg['decoder_norm%d' % (i + 1)] = norm_layer(int(dense_ngf)).type(self.dtype)
                 self.decoder_relu_dict_seg['decoder_relu%d' % (i + 1)] = nn.ReLU(True).type(self.dtype)
             else:
