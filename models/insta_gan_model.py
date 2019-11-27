@@ -63,7 +63,9 @@ class InstaGANModel(BaseModel):
 			self.fake_A_pool = ImagePool(opt.pool_size)	# '--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images'
 			self.fake_B_pool = ImagePool(opt.pool_size)
 			# define loss functions
-			self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
+			# self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)	# 通过opt.no_lsgan控制，使用MSEloss或者BSEloss
+			# self.criterionWGANGP = networks.DiscLossWGANGP()
+			self.criterionGAN = networks.DiscLossWGANGP(opt,self.Tensor)
 			self.criterionCyc = torch.nn.L1Loss()
 			self.criterionIdt = torch.nn.L1Loss()
 
@@ -257,7 +259,8 @@ class InstaGANModel(BaseModel):
 
 		# backward A
 		if self.forward_A:
-			self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)														# self.fake_B_mul用于计算loss，假的B的结果经过判别器，其结果（self.netD_A(self.fake_B_mul)）与希望的结果（True）之间的loss
+			# self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)														# self.fake_B_mul用于计算loss，假的B的结果经过判别器，其结果（self.netD_A(self.fake_B_mul)）与希望的结果（True）之间的loss
+			self.loss_G_A = self.criterionGAN.get_g_loss(self.netD_A,self.real_A_sng, self.fake_B_mul)														# self.fake_B_mul用于计算loss，假的B的结果经过判别器，其结果（self.netD_A(self.fake_B_mul)）与希望的结果（True）之间的loss
 			self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
 			self.loss_idt_B = self.criterionIdt(self.netG_B(self.real_A_sng), self.real_A_sng.detach()) * lambda_A * lambda_idt			# self.real_A_sng.detach()
 			weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
@@ -270,7 +273,8 @@ class InstaGANModel(BaseModel):
 
 		# backward B
 		if self.forward_B:
-			self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
+			# self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
+			self.loss_G_B = self.criterionGAN.get_g_loss(self.netD_B,self.real_B_sng, self.fake_A_mul)
 			self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_sng) * lambda_B
 			self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_sng), self.real_B_sng.detach()) * lambda_B * lambda_idt
 			weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
@@ -287,15 +291,17 @@ class InstaGANModel(BaseModel):
 
 	def backward_D_basic(self, netD, real, fake):
 		# Real
-		pred_real = netD(real)
-		loss_D_real = self.criterionGAN(pred_real, True)
+		# pred_real = netD(real)
+		# loss_D_real = self.criterionGAN(pred_real, True)
 		# Fake
-		pred_fake = netD(fake.detach())
-		loss_D_fake = self.criterionGAN(pred_fake, False)
+		# pred_fake = netD(fake.detach())
+		# loss_D_fake = self.criterionGAN(pred_fake, False)
 		# Combined loss
-		loss_D = (loss_D_real + loss_D_fake) * 0.5
+		# loss_D = (loss_D_real + loss_D_fake) * 0.5
+
+		loss_D = self.criterionGAN.get_loss(netD, fake, real)
 		# backward
-		loss_D.backward()
+		loss_D.backward(retain_graph=True)
 		return loss_D
 
 	def backward_D_A(self):
