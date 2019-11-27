@@ -75,7 +75,6 @@ if __name__ == '__main__':
         #     cur_preds = []  # clear cur_preds in each loop
 
         if opt.compute_IS or opt.compute_IS:
-            visuals['fake_B_img']
 
             # Set up dtype
             if opt.cuda:
@@ -93,7 +92,18 @@ if __name__ == '__main__':
                 param.requires_grad = False
             inception_up = nn.Upsample(size=(299, 299), mode='bilinear')
 
-            outputs = visuals['fake_B_img'] # 生成的domainB的假的图片，作为inception的输入
+            outputs_list = []
+
+            fake_A_img = visuals['fake_A_img']
+            fake_A_seg = torch.cat([visuals['fake_A_seg'],visuals['fake_A_seg'],visuals['fake_A_seg']],dim=1)
+            outputs_list.append(fake_A_img)
+            outputs_list.append(fake_A_seg)
+
+            fake_B_img = visuals['fake_B_img']
+            fake_B_seg = torch.cat([visuals['fake_B_seg'], visuals['fake_B_seg'], visuals['fake_B_seg']], dim=1)
+            outputs_list.append(fake_B_img)
+            outputs_list.append(fake_B_seg)
+            outputs = torch.cat(outputs_list,dim=0) # 生成的假的图片，作为inception的输入
 
             if opt.compute_IS or opt.compute_CIS:
                 pred = F.softmax(inception(inception_up(outputs)), dim=1).cpu().data.numpy()  # get the predicted class distribution
