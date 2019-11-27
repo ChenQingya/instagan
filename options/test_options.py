@@ -28,6 +28,8 @@ class TestOptions(BaseOptions):
         parser.add_argument('--trainer', type=str, default='InstaGAN', help="InstaGAN") # 改为instagan
         parser.add_argument('--compute_IS', action='store_true', default=True,
                             help="whether to compute Inception Score or not")
+        parser.add_argument('--compute_fid', action='store_true', default=True,
+                            help="whether to compute fid Score or not")
         parser.add_argument('--compute_CIS', action='store_true', default=True,
                             help="whether to compute Conditional Inception Score or not")
         parser.add_argument('--inception_a', type=str, default='.',
