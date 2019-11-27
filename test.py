@@ -31,7 +31,7 @@ if __name__ == '__main__':
             break
         model.set_input(data)
         model.test()
-        visuals = model.get_current_visuals()
+        visuals = model.get_current_visuals()   # 生成的图像
         img_path = model.get_image_paths()
         if i % 5 == 0:
             print('processing (%04d)-th image... %s' % (i, img_path))
