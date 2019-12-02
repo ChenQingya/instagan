@@ -96,8 +96,7 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False,
     if netD == 'basic':
         net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
     elif netD == 'set':
-        # net = NLayerSetDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
-        net = CAMDiscriminator(input_nc, ndf, n_layers=3)
+        net = NLayerSetDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % net)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -854,100 +853,6 @@ class NLayerSetDiscriminator(nn.Module):
         out = self.classifier(feat)
         return out
 
-
-class CAMDiscriminator(nn.Module):
-    def __init__(self, input_nc, ndf=64, n_layers=5):
-        super(CAMDiscriminator, self).__init__()
-        self.input_nc = input_nc
-        model = [nn.ReflectionPad2d(1),
-                 nn.utils.spectral_norm(
-                 nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=0, bias=True)),
-                 nn.LeakyReLU(0.2, True)]
-        model_seg = [nn.ReflectionPad2d(1),
-                 nn.utils.spectral_norm(
-                     nn.Conv2d(1, ndf, kernel_size=4, stride=2, padding=0, bias=True)),
-                 nn.LeakyReLU(0.2, True)]
-
-        for i in range(1, n_layers - 2):
-            mult = 2 ** (i - 1)
-            model += [nn.ReflectionPad2d(1),
-                      nn.utils.spectral_norm(
-                      nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=2, padding=0, bias=True)),
-                      nn.LeakyReLU(0.2, True)]
-            model_seg += [nn.ReflectionPad2d(1),
-                      nn.utils.spectral_norm(
-                          nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=2, padding=0, bias=True)),
-                      nn.LeakyReLU(0.2, True)]
-
-        mult = 2 ** (n_layers - 2 - 1)
-        model += [nn.ReflectionPad2d(1),
-                  nn.utils.spectral_norm(
-                  nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=1, padding=0, bias=True)),
-                  nn.LeakyReLU(0.2, True)]
-        model_seg += [nn.ReflectionPad2d(1),
-                  nn.utils.spectral_norm(
-                      nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=1, padding=0, bias=True)),
-                  nn.LeakyReLU(0.2, True)]
-
-        # Class Activation Map
-        mult = 2 ** (n_layers - 2)
-        self.gap_fc = nn.utils.spectral_norm(nn.Linear(ndf * mult, 1, bias=False))
-        self.gmp_fc = nn.utils.spectral_norm(nn.Linear(ndf * mult, 1, bias=False))
-        self.conv1x1 = nn.Conv2d(ndf * mult * 2, ndf * mult, kernel_size=1, stride=1, bias=True)
-        self.leaky_relu = nn.LeakyReLU(0.2, True)
-
-        self.pad = nn.ReflectionPad2d(1)
-        self.conv = nn.utils.spectral_norm(
-            nn.Conv2d(ndf * mult, 1, kernel_size=4, stride=1, padding=0, bias=False))   # 对应于instagan中的self.classifier
-
-        self.model = nn.Sequential(*model)
-        self.model_seg = nn.Sequential(*model_seg)
-
-        self.merge_conv = nn.Conv2d(ndf * mult * 2,ndf * mult,kernel_size=3, padding=1)
-
-
-    def forward(self, input):
-        img = input[:, :self.input_nc, :, :]
-        segs = input[:, self.input_nc:, :, :]  # (B, CA, W, H)
-        mean = (segs + 1).mean(0).mean(-1).mean(-1)
-        if mean.sum() == 0:
-            mean[0] = 1  # forward at least one segmentation
-
-        # run feature extractor
-        # x = self.model(input)
-
-        x = self.model(img)
-        feat_segs = list()
-        for i in range(segs.size(1)):
-            if mean[i] > 0:  # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)
-                feat_segs.append(self.model_seg(seg))
-        feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
-
-        # run classifier
-        x = torch.cat([x, feat_segs_sum], dim=1)
-        x = self.merge_conv(x)
-
-        gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
-        gap_logit = self.gap_fc(gap.view(x.shape[0], -1))
-        gap_weight = list(self.gap_fc.parameters())[0]
-        gap = x * gap_weight.unsqueeze(2).unsqueeze(3)
-
-        gmp = torch.nn.functional.adaptive_max_pool2d(x, 1)
-        gmp_logit = self.gmp_fc(gmp.view(x.shape[0], -1))
-        gmp_weight = list(self.gmp_fc.parameters())[0]
-        gmp = x * gmp_weight.unsqueeze(2).unsqueeze(3)
-
-        cam_logit = torch.cat([gap_logit, gmp_logit], 1)
-        x = torch.cat([gap, gmp], 1)
-        x = self.leaky_relu(self.conv1x1(x))
-
-        heatmap = torch.sum(x, dim=1, keepdim=True)
-
-        x = self.pad(x)
-        out = self.conv(x)
-
-        return out
 
 class PixelDiscriminator(nn.Module):
     def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
