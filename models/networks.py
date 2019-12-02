@@ -863,6 +863,10 @@ class CAMDiscriminator(nn.Module):
                  nn.utils.spectral_norm(
                  nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=0, bias=True)),
                  nn.LeakyReLU(0.2, True)]
+        model_seg = [nn.ReflectionPad2d(1),
+                 nn.utils.spectral_norm(
+                     nn.Conv2d(1, ndf, kernel_size=4, stride=2, padding=0, bias=True)),
+                 nn.LeakyReLU(0.2, True)]
 
         for i in range(1, n_layers - 2):
             mult = 2 ** (i - 1)
@@ -870,11 +874,19 @@ class CAMDiscriminator(nn.Module):
                       nn.utils.spectral_norm(
                       nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=2, padding=0, bias=True)),
                       nn.LeakyReLU(0.2, True)]
+            model_seg += [nn.ReflectionPad2d(1),
+                      nn.utils.spectral_norm(
+                          nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=2, padding=0, bias=True)),
+                      nn.LeakyReLU(0.2, True)]
 
         mult = 2 ** (n_layers - 2 - 1)
         model += [nn.ReflectionPad2d(1),
                   nn.utils.spectral_norm(
                   nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=1, padding=0, bias=True)),
+                  nn.LeakyReLU(0.2, True)]
+        model_seg += [nn.ReflectionPad2d(1),
+                  nn.utils.spectral_norm(
+                      nn.Conv2d(ndf * mult, ndf * mult * 2, kernel_size=4, stride=1, padding=0, bias=True)),
                   nn.LeakyReLU(0.2, True)]
 
         # Class Activation Map
@@ -889,6 +901,10 @@ class CAMDiscriminator(nn.Module):
             nn.Conv2d(ndf * mult, 1, kernel_size=4, stride=1, padding=0, bias=False))   # 对应于instagan中的self.classifier
 
         self.model = nn.Sequential(*model)
+        self.model_seg = nn.Sequential(*model_seg)
+
+        self.merge_conv = nn.Conv2d(ndf * mult * 2,ndf * mult,kernel_size=3, padding=1)
+
 
     def forward(self, input):
         img = input[:, :self.input_nc, :, :]
@@ -899,7 +915,18 @@ class CAMDiscriminator(nn.Module):
 
         # run feature extractor
         # x = self.model(input)
+
         x = self.model(img)
+        feat_segs = list()
+        for i in range(segs.size(1)):
+            if mean[i] > 0:  # skip empty segmentation
+                seg = segs[:, i, :, :].unsqueeze(1)
+                feat_segs.append(self.model_seg(seg))
+        feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
+
+        # run classifier
+        x = torch.cat([x, feat_segs_sum], dim=1)
+        x = self.merge_conv(x)
 
         gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
         gap_logit = self.gap_fc(gap.view(x.shape[0], -1))
