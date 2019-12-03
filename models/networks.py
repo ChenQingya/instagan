@@ -80,10 +80,10 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     norm_layer = get_norm_layer(norm_type=norm)
     img_size = 224
     if netG == 'basic':
-        net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9)
+        net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
     elif netG == 'set':
-        net = ResnetSetGenerator(input_nc, output_nc, img_size, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9)
-        # net = ResnetCAMGenerator(input_nc=5, output_nc=5, ngf=64, n_blocks=9, img_size=224, light=True)
+        net = ResnetSetGenerator(input_nc, output_nc, img_size, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
+        # net = ResnetCAMGenerator(input_nc=5, output_nc=5, ngf=64, n_blocks=6, img_size=224, light=True)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -394,26 +394,26 @@ class ResnetSetGenerator(nn.Module):
         self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)   # 2*ngf,此时新的ngf变成128
         self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)           # 3*ngf,因为输入的channel大小是3倍
         self.light = True
-        self.FC = self.get_FC(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, img_size)
+        self.FC_seg = self.get_FC(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, img_size)
 
         mult = 2 ** n_downsampling
 
         # Class Activation Map
-        self.gap_fc = nn.Linear(ngf * mult, 1, bias=False)
-        self.gmp_fc = nn.Linear(ngf * mult, 1, bias=False)
-        self.conv1x1 = nn.Conv2d(ngf * mult * 2, ngf * mult, kernel_size=1, stride=1, bias=True)
-        self.relu = nn.ReLU(True)
+        self.gap_fc_seg = nn.Linear(ngf * mult, 1, bias=False)
+        self.gmp_fc_seg = nn.Linear(ngf * mult, 1, bias=False)
+        self.conv1x1_seg = nn.Conv2d(ngf * mult * 2, ngf * mult, kernel_size=1, stride=1, bias=True)
+        self.relu_seg = nn.ReLU(True)
 
         # Gamma, Beta block
-        self.gamma = nn.Linear(ngf * mult, ngf * mult, bias=False)
-        self.beta = nn.Linear(ngf * mult, ngf * mult, bias=False)
+        self.gamma_seg = nn.Linear(ngf * mult, ngf * mult, bias=False)
+        self.beta_seg = nn.Linear(ngf * mult, ngf * mult, bias=False)
 
         self.n_blocks = n_blocks
 
         for i in range(n_blocks):
             # model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
             #model += [ResnetAdaILNBlock(ngf * mult, use_bias=use_bias)]
-            setattr(self, 'UpBlock1_' + str(i + 1), ResnetAdaILNBlock(ngf * mult, use_bias=False))
+            setattr(self, 'UpBlock1_seg_' + str(i + 1), ResnetAdaILNBlock(ngf * mult, use_bias=False))
 
     def get_FC(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, img_size):
         mult = 2 ** n_downsampling
@@ -442,10 +442,10 @@ class ResnetSetGenerator(nn.Module):
                       norm_layer(ngf * mult * 2),
                       nn.ReLU(True)]
 
-        # mult = 2 ** n_downsampling
-        # for i in range(n_blocks):
-        #   model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
-        #   model += [ResnetAdaILNBlock(ngf * mult, use_bias=use_bias)]
+        mult = 2 ** n_downsampling
+        for i in range(n_blocks):
+          model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
+          # model += [ResnetAdaILNBlock(ngf * mult, use_bias=use_bias)]
 
         return nn.Sequential(*model)
 
@@ -472,39 +472,43 @@ class ResnetSetGenerator(nn.Module):
 
         # run encoder
         enc_img = self.encoder_img(img)                             # enc_img:torch.Size([1, 256, 50, 50]) encoder没有改变ｘ[1,256,50,50]的大小
-        x = enc_img
-        gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
-        gap_logit = self.gap_fc(gap.view(x.shape[0], -1))
-        gap_weight = list(self.gap_fc.parameters())[0]
-        gap = x * gap_weight.unsqueeze(2).unsqueeze(3)
 
-        gmp = torch.nn.functional.adaptive_max_pool2d(x, 1)
-        gmp_logit = self.gmp_fc(gmp.view(x.shape[0], -1))
-        gmp_weight = list(self.gmp_fc.parameters())[0]
-        gmp = x * gmp_weight.unsqueeze(2).unsqueeze(3)
-
-        cam_logit = torch.cat([gap_logit, gmp_logit], 1)
-        x = torch.cat([gap, gmp], 1)
-        x = self.relu(self.conv1x1(x))
-
-        heatmap = torch.sum(x, dim=1, keepdim=True)
-
-        if self.light:
-            x_ = torch.nn.functional.adaptive_avg_pool2d(x, 1)
-            x_ = self.FC(x_.view(x_.shape[0], -1))
-        else:
-            x_ = self.FC(x.view(x.shape[0], -1))
-        gamma, beta = self.gamma(x_), self.beta(x_)
-
-        #resnet_adaILN_img = self.resnet_adaILN_img(x,gamma, beta)
-        for i in range(self.n_blocks):
-            x = getattr(self, 'UpBlock1_' + str(i+1))(x, gamma, beta)
 
         enc_segs = list()
         for i in range(segs.size(1)):
+        # for i in range(1):
             if mean[i] > 0:                                         # skip empty segmentation
+            # if mean[0] > 0:                                       # skip empty segmentation
                 seg = segs[:, i, :, :].unsqueeze(1)                 # seg:torch.Size([1, 1, 200, 200])
-                enc_segs.append(self.encoder_seg(seg))              # self.encoder_seg(seg)的结果torch.Size([1, 256, 50, 50]),总共append两次
+                enc_seg = self.encoder_seg(seg)
+                y = enc_seg
+                gap_seg = torch.nn.functional.adaptive_avg_pool2d(y, 1)
+                gap_logit_seg = self.gap_fc_seg(gap_seg.view(y.shape[0], -1))
+                gap_weight_seg = list(self.gap_fc_seg.parameters())[0]
+                gap_seg = y * gap_weight_seg.unsqueeze(2).unsqueeze(3)
+
+                gmp_seg = torch.nn.functional.adaptive_max_pool2d(y, 1)
+                gmp_logit_seg = self.gmp_fc_seg(gmp_seg.view(y.shape[0], -1))
+                gmp_weight_seg = list(self.gmp_fc_seg.parameters())[0]
+                gmp_seg = y * gmp_weight_seg.unsqueeze(2).unsqueeze(3)
+
+                cam_logit_seg = torch.cat([gap_logit_seg, gmp_logit_seg], 1)
+                y = torch.cat([gap_seg, gmp_seg], 1)
+                y = self.relu_seg(self.conv1x1_seg(y))
+
+                heatmap_seg = torch.sum(y, dim=1, keepdim=True)
+
+                if self.light:
+                    y_ = torch.nn.functional.adaptive_avg_pool2d(y, 1)
+                    y_ = self.FC_seg(y_.view(y_.shape[0], -1))
+                else:
+                    y_ = self.FC_seg(y.view(y.shape[0], -1))
+                gamma_seg, beta_seg = self.gamma_seg(y_), self.beta_seg(y_)
+
+                # resnet_adaILN_img = self.resnet_adaILN_img(y,gamma, beta)
+                for i in range(self.n_blocks):
+                    y = getattr(self, 'UpBlock1_seg_' + str(i + 1))(y, gamma_seg, beta_seg)
+                enc_segs.append(y)              # self.encoder_seg(seg)的结果torch.Size([1, 256, 50, 50]),总共append两次
         enc_segs = torch.cat(enc_segs)
         enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)     # enc_segs_sum:torch.Size([1, 256, 50, 50])
                                                                     #  aggregated set feature
@@ -514,7 +518,9 @@ class ResnetSetGenerator(nn.Module):
         out = [self.decoder_img(feat)]
         idx = 0
         for i in range(segs.size(1)):
+        # for i in range(1):
             if mean[i] > 0:
+            # if mean[0] > 0:
                 enc_seg = enc_segs[idx].unsqueeze(0)                # (1, ngf, w, h)
                 idx += 1  # move to next index
                 feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
