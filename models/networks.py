@@ -113,33 +113,33 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False,
 # that has the same size as the input
 # 计算ganloss，已知常规形式：loss（output，target）。这里output就是以下的self.input，target就是target_real_label.
 # 注意loss（output，target），在此处，output和target都是tensor
-# class GANLoss(nn.Module):
-#     def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0):
-#         super(GANLoss, self).__init__()
-#         self.register_buffer('real_label', torch.tensor(target_real_label))
-#         self.register_buffer('fake_label', torch.tensor(target_fake_label))
-#         if use_lsgan:
-#             self.loss = nn.MSELoss()
-#         else:
-#             self.loss = nn.BCELoss()
-#
-#     # 将target_is_real（形式很有可能是boolean，比如True或False）转成tensor，且大小和input一致
-#     def get_target_tensor(self, input, target_is_real):
-#         if target_is_real:
-#             target_tensor = self.real_label
-#         else:
-#             target_tensor = self.fake_label
-#         return target_tensor.expand_as(input)
-#
-#     def __call__(self, input, target_is_real):
-#         target_tensor = self.get_target_tensor(input, target_is_real)
-#         return self.loss(input, target_tensor)
-
 class GANLoss(nn.Module):
+    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0):
+        super(GANLoss, self).__init__()
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        if use_lsgan:
+            self.loss = nn.MSELoss()
+        else:
+            self.loss = nn.BCELoss()
+
+    # 将target_is_real（形式很有可能是boolean，比如True或False）转成tensor，且大小和input一致
+    def get_target_tensor(self, input, target_is_real):
+        if target_is_real:
+            target_tensor = self.real_label
+        else:
+            target_tensor = self.fake_label
+        return target_tensor.expand_as(input)
+
+    def __call__(self, input, target_is_real):
+        target_tensor = self.get_target_tensor(input, target_is_real)
+        return self.loss(input, target_tensor)
+
+class CAMGANLoss(nn.Module):
 	def __init__(
 			self, use_l1=True, target_real_label=1.0,
 			target_fake_label=0.0, tensor=torch.FloatTensor):
-		super(GANLoss, self).__init__()
+		super(CAMGANLoss, self).__init__()
 		self.real_label = target_real_label
 		self.fake_label = target_fake_label
 		self.real_label_var = None
@@ -177,7 +177,7 @@ class DiscLoss:
         return 'DiscLoss'
 
     def __init__(self, opt, tensor):
-        self.criterionGAN = GANLoss(use_l1=False, tensor=tensor)
+        self.criterionGAN = CAMGANLoss(use_l1=False, tensor=tensor)
         self.fake_AB_pool = ImagePool(opt.pool_size)
 
     def get_g_loss(self, net, realA, fakeB):
