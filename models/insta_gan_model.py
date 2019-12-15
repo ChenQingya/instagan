@@ -285,10 +285,29 @@ class InstaGANModel(BaseModel):
 		self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
 		self.loss_G.backward()	# 生成器A和生成器B的各种loss为总G的loss，反向传播
 
+	def gradient_penalty(self, y, x):
+		"""Compute gradient penalty: (L2_norm(dy/dx) - 1)**2."""
+		weight = torch.ones(y.size()).to(self.device)
+		dydx = torch.autograd.grad(outputs=y,
+								   inputs=x,
+								   grad_outputs=weight,
+								   retain_graph=True,
+								   create_graph=True,
+								   only_inputs=True)[0]
+
+		dydx = dydx.view(dydx.size(0), -1)
+		dydx_l2norm = torch.sqrt(torch.sum(dydx ** 2, dim=1))
+		return torch.mean((dydx_l2norm - 1) ** 2)
+
+	def reset_grad(self):
+		"""Reset the gradient buffers."""
+		self.optimizer_G.zero_grad()
+		self.optimizer_D.zero_grad()
+
 	def backward_D_basic(self, netD, real, fake):
 		# Real
-		pred_real = netD(real)
-		loss_D_real = self.criterionGAN(pred_real, True)
+		pred_real = netD(real)  # pred_real:torch.Size([1, 1, 26, 26]),real:torch.Size([1, 7, 224, 224])
+		loss_D_real = self.criterionGAN(pred_real, True)    # 计算：真实图片的预测值和标签(True)之间的对抗loss
 		# Fake
 		pred_fake = netD(fake.detach())
 		loss_D_fake = self.criterionGAN(pred_fake, False)
@@ -298,13 +317,39 @@ class InstaGANModel(BaseModel):
 		loss_D.backward()
 		return loss_D
 
+	def backward_D_basic_gp(self, netD, real, fake):
+		# Real
+		pred_real = netD(real)  # pred_real:torch.Size([1, 1, 26, 26]),real:torch.Size([1, 7, 224, 224])
+		loss_D_real = self.criterionGAN(pred_real, True)  # 计算：真实图片的预测值和标签(True)之间的对抗loss
+		# Fake
+		pred_fake = netD(fake.detach())
+		loss_D_fake = self.criterionGAN(pred_fake, False)
+		# Compute loss for gradient penalty.
+		alpha = torch.rand(real.size(0), 1, 1, 1).to(self.device).detach()					# alpha:torch.Size([1, 1, 1, 1])
+		x_hat = (alpha * real.data + (1 - alpha) * fake.data).requires_grad_(True)	# x_hat:torch.Size([1, 7, 224, 224])
+		out = netD(x_hat.detach())															# out:torch.Size([1, 1, 26, 26])
+		d_loss_gp = self.gradient_penalty(out, x_hat)
+		# Combined loss
+		loss_D = (loss_D_real + loss_D_fake) * 0.3 + d_loss_gp * 0.4	# 暂时设置比例为3：3：4
+		# self.reset_grad()
+		# backward
+		loss_D.backward()
+		return loss_D
+
+
 	def backward_D_A(self):
-		fake_B = self.fake_B_pool.query(self.fake_B_mul)
-		self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+		fake_B = self.fake_B_pool.query(self.fake_B_mul)    # fake_B_mul:torch.Size([1, 7, 224, 224]) fake_B:torch.Size([1, 7, 224, 224])不知道pool的意义是什么
+		if self.opt.gp:
+			self.loss_D_A = self.backward_D_basic_gp(self.netD_A, self.real_B, fake_B)  # self.real_B:torch.Size([1, 7, 224, 224])
+		else:
+			self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B) # self.real_B:torch.Size([1, 7, 224, 224])
 
 	def backward_D_B(self):
 		fake_A = self.fake_A_pool.query(self.fake_A_mul)
-		self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+		if self.opt.gp:
+			self.loss_D_B = self.backward_D_basic_gp(self.netD_B, self.real_A, fake_A)
+		else:
+			self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
 
 	def optimize_parameters(self):											# 用于train.py,和test()很像
 		# init setting														# 与test()相同的初始化

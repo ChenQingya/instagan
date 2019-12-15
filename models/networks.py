@@ -682,14 +682,14 @@ class NLayerSetDiscriminator(nn.Module):
 
     def forward(self, inp):
         # split data
-        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
+        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H) torch.Size([1, 3, 224, 224])
+        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H) torch.Size([1, 4, 224, 224])
         mean = (segs + 1).mean(0).mean(-1).mean(-1)
         if mean.sum() == 0:
             mean[0] = 1  # forward at least one segmentation
 
         # run feature extractor
-        feat_img = self.feature_img(img)
+        feat_img = self.feature_img(img)    # feat_img:=torch.Size([1, 256, 28, 28])
         feat_segs = list()
         for i in range(segs.size(1)):
             if mean[i] > 0:  # skip empty segmentation
@@ -698,8 +698,8 @@ class NLayerSetDiscriminator(nn.Module):
         feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
 
         # run classifier
-        feat = torch.cat([feat_img, feat_segs_sum], dim=1)
-        out = self.classifier(feat)
+        feat = torch.cat([feat_img, feat_segs_sum], dim=1)  # feat:torch.Size([1, 512, 28, 28])
+        out = self.classifier(feat)                         # out:torch.Size([1, 1, 26, 26])
         return out
 
 
