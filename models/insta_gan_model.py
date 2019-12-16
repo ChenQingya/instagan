@@ -333,25 +333,47 @@ class InstaGANModel(BaseModel):
 			with torch.no_grad():  											# no grad,注意！test的时候没有更新参数，所以forward的时候设置：no grad
 				self.forward(i)
 
-			# update setting for next iteration
-			self.real_A_img_sng = self.fake_B_img_sng.detach()
-			self.real_B_img_sng = self.fake_A_img_sng.detach()
-			self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
-			self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
-			self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
-			self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
+			if self.opt.netG == 'star':
+				# update setting for next iteration
+				self.real_A_img_sng = self.fake_B_img_sng.detach()
+				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				# self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
+				# self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
+				# self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
+				# self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
 
-			# save visuals													# 保存生成的图片，包括fake和reconstruct
-			if i == 0:  # first
-				self.rec_A_img = self.rec_A_img_sng
-				self.rec_B_img = self.rec_B_img_sng
-			if i == self.ins_iter - 1:  # last
-				self.fake_A_img = self.fake_A_img_sng
-				self.fake_B_img = self.fake_B_img_sng
-				self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
-				self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
-				self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
-				self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
+				# save visuals													# 保存生成的图片，包括fake和reconstruct
+				if i == 0:  # first
+					self.rec_A_img = self.rec_A_img_sng
+					self.rec_B_img = self.rec_B_img_sng
+				if i == self.ins_iter - 1:  # last
+					self.fake_A_img = self.fake_A_img_sng
+					self.fake_B_img = self.fake_B_img_sng
+				# self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
+				# self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
+				# self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
+				# self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
+			else:
+				# update setting for next iteration
+				self.real_A_img_sng = self.fake_B_img_sng.detach()
+				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
+				self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
+				self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
+				self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
+
+				# save visuals													# 保存生成的图片，包括fake和reconstruct
+				if i == 0:  # first
+					self.rec_A_img = self.rec_A_img_sng
+					self.rec_B_img = self.rec_B_img_sng
+				if i == self.ins_iter - 1:  # last
+					self.fake_A_img = self.fake_A_img_sng
+					self.fake_B_img = self.fake_B_img_sng
+					self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
+					self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
+					self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
+					self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
+
 
 	def backward_G(self):													# 计算生成器的总loss并反向传播
 		lambda_A = self.opt.lambda_A										# 用于backward A
