@@ -34,14 +34,18 @@ class InstaGANModel(BaseModel):
 																			# “//”，在python中，整数除法，这个叫“地板除”，3//2=1
 
 		# specify the training losses you want to print out. The program will call base_model.get_current_losses
-		self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
+		# self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
+		# 删掉ctx_A,ctx_B
+		self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'D_B', 'G_B', 'cyc_B', 'idt_B']
 
 		# specify the images you want to save/display. The program will call base_model.get_current_visuals
 		visual_names_A_img = ['real_A_img', 'fake_B_img', 'rec_A_img']
 		visual_names_B_img = ['real_B_img', 'fake_A_img', 'rec_B_img']
 		visual_names_A_seg = ['real_A_seg', 'fake_B_seg', 'rec_A_seg']
 		visual_names_B_seg = ['real_B_seg', 'fake_A_seg', 'rec_B_seg']
-		self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
+		# self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
+		# 暂时注释不保存seg
+		self.visual_names = visual_names_A_img + visual_names_B_img	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
 
 		# specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
 		if self.isTrain:													#isTrain：True时表示是执行了train.py，否则执行了test.py
@@ -52,12 +56,12 @@ class InstaGANModel(BaseModel):
 		# load/define networks
 		# The naming conversion is different from those used in the paper
 		# Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-		self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)	# opt.norm默认是'instance'
-		self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+		self.netG_A = networks.define_G(opt.input_nc, opt.ins_per, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)	# opt.norm默认是'instance'
+		self.netG_B = networks.define_G(opt.output_nc, opt.ins_per, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 		if self.isTrain:
 			use_sigmoid = opt.no_lsgan	#why?为什么不使用lsgan，就表示用sigmoid？
-			self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
-			self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
+			self.netD_A = networks.define_D(opt.output_nc, opt.ins_per, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
+			self.netD_B = networks.define_D(opt.input_nc, opt.ins_per, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 
 		if self.isTrain:
 			self.fake_A_pool = ImagePool(opt.pool_size)	# '--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images'
@@ -184,35 +188,135 @@ class InstaGANModel(BaseModel):
 
 		# forward A
 		if self.forward_A:
-			self.real_A_sng = torch.cat([self.real_A_img_sng, self.real_A_seg_sng], dim=1)
-			self.fake_B_sng = self.netG_A(self.real_A_sng)							# (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
-			self.rec_A_sng = self.netG_B(self.fake_B_sng)							# 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+			# self.real_A_sng = torch.cat([self.real_A_img_sng, self.real_A_seg_sng], dim=1)
+			self.real_A_fuse_sng = torch.cat([self.real_A_img_sng, self.real_A_seg_sng], dim=1)
 
-			self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)	# 生成的假的domain B的图:split分为domainB的假的img和假的seg。
-																					#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
-			self.rec_A_img_sng, self.rec_A_seg_sng = self.split(self.rec_A_sng)		# reconstruct的domainA的图：split分为domainA的重构的img和假的seg。
-																					#  暂定self.rec_A_img_sng用于计算IS（inception score）
-			fake_B_seg_list = self.fake_B_seg_list + [self.fake_B_seg_sng]  		# not detach
-			for i in range(self.ins_iter - idx - 1):								# 总共需要增加几个seg？
-				fake_B_seg_list.append(empty)										# 为了使fake_B_seg_mul的大小与相同，所以增加一部分seg（这部分seg的每个像素为-1）
+			if self.opt.netG == 'star':
+				# # self.opt.input_nc = input.size(1)
+				# # self.opt.input_nc = self.real_A_sng.size(1)
+				# self.netG_A = networks.define_G(self.real_A_sng.size(1), self.real_A_sng.size(1), self.opt.ngf, self.opt.netG,
+				# 								self.opt.norm, not self.opt.no_dropout,
+				# 								self.opt.init_type, self.opt.init_gain,
+				# 								self.gpu_ids)  # self.opt.norm默认是'instance'
+				# self.netG_B = networks.define_G(self.real_A_sng.size(1), self.real_A_sng.size(1), self.opt.ngf, self.opt.netG,
+				# 								self.opt.norm, not self.opt.no_dropout,
+				# 								self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+				# if self.isTrain:
+				# 	use_sigmoid = self.opt.no_lsgan  # why?为什么不使用lsgan，就表示用sigmoid？
+				# 	self.netD_A = networks.define_D(self.real_B.size(1), self.opt.ndf, self.opt.netD,
+				# 									self.opt.n_layers_D,
+				# 									self.opt.norm, use_sigmoid,
+				# 									self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+				# 	self.netD_B = networks.define_D(self.real_A_sng.size(1), self.opt.ndf, self.opt.netD, self.opt.n_layers_D,
+				# 									self.opt.norm, use_sigmoid,
+				# 									self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+                #
+				# self.optimizer_G = torch.optim.Adam(filter(lambda p: p.requires_grad,
+				# 										   itertools.chain(self.netG_A.parameters(),
+				# 														   self.netG_B.parameters())), lr=self.opt.lr,
+				# 									betas=(self.opt.beta1, 0.999))
+				# self.optimizer_D = torch.optim.Adam(filter(lambda p: p.requires_grad,
+				# 										   itertools.chain(self.netD_A.parameters(),
+				# 														   self.netD_B.parameters())), lr=self.opt.lr,
+				# 									betas=(self.opt.beta1, 0.999))
+				# self.optimizers = []
+				# self.optimizers.append(self.optimizer_G)
+				# self.optimizers.append(self.optimizer_D)
 
-			self.fake_B_seg_mul = torch.cat(fake_B_seg_list, dim=1)							# 为什么要计算fake_B_seg_mul，似乎是将多个假的domainB的seg通过torch.cat连接起来
-			self.fake_B_mul = torch.cat([self.fake_B_img_sng, self.fake_B_seg_mul], dim=1)	# self.fake_B_mul是假的domainB的结果，用于计算loss
+				self.fake_B_sng = self.netG_A(self.real_A_fuse_sng)  # (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
+				self.fake_B_img_sng, self.fake_B_fuse_sng = self.split(self.fake_B_sng)
+				# self.rec_A_sng = self.netG_B(self.fake_B_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+
+				# self.rec_A_sng = self.netG_B(self.fake_B_fuse_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+				self.rec_A_sng = self.netG_B(self.fake_B_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+				self.rec_A_img_sng, self.rec_A_fuse_sng = self.split(self.rec_A_sng)
+
+				# self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)  # 生成的假的domain B的图:split分为domainB的假的img和假的seg。
+				#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
+				# self.rec_A_img_sng, self.rec_A_seg_sng = self.split(self.rec_A_sng)  # reconstruct的domainA的图：split分为domainA的重构的img和假的seg。
+				#  暂定self.rec_A_img_sng用于计算IS（inception score）
+				# fake_B_seg_list = self.fake_B_seg_list + [self.fake_B_seg_sng]  # not detach
+				# for i in range(self.ins_iter - idx - 1):  # 总共需要增加几个seg？
+				# 	fake_B_seg_list.append(empty)  # 为了使fake_B_seg_mul的大小与相同，所以增加一部分seg（这部分seg的每个像素为-1）
+				#
+				# self.fake_B_seg_mul = torch.cat(fake_B_seg_list,dim=1)  # 为什么要计算fake_B_seg_mul，似乎是将多个假的domainB的seg通过torch.cat连接起来
+				# self.fake_B_mul = torch.cat([self.fake_B_img_sng, self.fake_B_seg_mul],dim=1)  # self.fake_B_mul是假的domainB的结果，用于计算loss
+
+				# self.fake_B_mul = self.fake_B_fuse_sng  # self.fake_B_mul是假的domainB的结果，用于计算loss
+				self.fake_B_mul = self.fake_B_sng  # self.fake_B_mul是假的domainB的结果，用于计算loss
+
+
+			else:
+				# self.netG_A = networks.define_G(self.opt.input_nc, self.opt.output_nc, self.opt.ngf, self.opt.netG, self.opt.norm,
+				# 								not self.opt.no_dropout, self.opt.init_type, self.opt.init_gain,
+				# 								self.gpu_ids)  # self.opt.norm默认是'instance'
+				# self.netG_B = networks.define_G(self.opt.output_nc, self.opt.input_nc, self.opt.ngf, self.opt.netG, self.opt.norm,
+				# 								not self.opt.no_dropout, self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+				# if self.isTrain:
+				# 	use_sigmoid = self.opt.no_lsgan  # why?为什么不使用lsgan，就表示用sigmoid？
+				# 	self.netD_A = networks.define_D(self.opt.output_nc, self.opt.ndf, self.opt.netD, self.opt.n_layers_D, self.opt.norm,
+				# 									use_sigmoid, self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+				# 	self.netD_B = networks.define_D(self.opt.input_nc, self.opt.ndf, self.opt.netD, self.opt.n_layers_D, self.opt.norm,
+				# 									use_sigmoid, self.opt.init_type, self.opt.init_gain, self.gpu_ids)
+				self.fake_B_sng = self.netG_A(self.real_A_sng)  # (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
+				self.rec_A_sng = self.netG_B(self.fake_B_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
+
+				self.fake_B_img_sng, self.fake_B_seg_sng = self.split(
+					self.fake_B_sng)  # 生成的假的domain B的图:split分为domainB的假的img和假的seg。
+				#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
+				self.rec_A_img_sng, self.rec_A_seg_sng = self.split(
+					self.rec_A_sng)  # reconstruct的domainA的图：split分为domainA的重构的img和假的seg。
+				#  暂定self.rec_A_img_sng用于计算IS（inception score）
+				fake_B_seg_list = self.fake_B_seg_list + [self.fake_B_seg_sng]  # not detach
+				for i in range(self.ins_iter - idx - 1):  # 总共需要增加几个seg？
+					fake_B_seg_list.append(empty)  # 为了使fake_B_seg_mul的大小与相同，所以增加一部分seg（这部分seg的每个像素为-1）
+
+				self.fake_B_seg_mul = torch.cat(fake_B_seg_list,
+												dim=1)  # 为什么要计算fake_B_seg_mul，似乎是将多个假的domainB的seg通过torch.cat连接起来
+				self.fake_B_mul = torch.cat([self.fake_B_img_sng, self.fake_B_seg_mul],
+											dim=1)  # self.fake_B_mul是假的domainB的结果，用于计算loss
+
 
 		# forward B
 		if self.forward_B:
-			self.real_B_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
-			self.fake_A_sng = self.netG_B(self.real_B_sng)
-			self.rec_B_sng = self.netG_A(self.fake_A_sng)
+			if self.opt.netG == 'star':
+				# self.real_B_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
+				self.real_B_fuse_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
+				self.fake_A_sng = self.netG_B(self.real_B_fuse_sng)
+				self.fake_A_img_sng, self.fake_A_fuse_sng = self.split(self.fake_A_sng)
 
-			self.fake_A_img_sng, self.fake_A_seg_sng = self.split(self.fake_A_sng)																							# 暂定self.fake_A_img_sng用于计算IS（inception score）
-			self.rec_B_img_sng, self.rec_B_seg_sng = self.split(self.rec_B_sng)																								# 暂定self.rec_B_img_sng用于计算IS（inception score）
-			fake_A_seg_list = self.fake_A_seg_list + [self.fake_A_seg_sng]  # not detach
-			for i in range(self.ins_iter - idx - 1):
-				fake_A_seg_list.append(empty)
+				# self.rec_B_sng = self.netG_A(self.fake_A_fuse_sng)
+				self.rec_B_sng = self.netG_A(self.fake_A_sng)
+				self.rec_B_img_sng, self.rec_B_fuse_sng = self.split(self.rec_B_sng)
 
-			self.fake_A_seg_mul = torch.cat(fake_A_seg_list, dim=1)
-			self.fake_A_mul = torch.cat([self.fake_A_img_sng, self.fake_A_seg_mul], dim=1)
+				# self.fake_A_img_sng, self.fake_A_seg_sng = self.split(self.fake_A_sng)  # 暂定self.fake_A_img_sng用于计算IS（inception score）
+				# self.rec_B_img_sng, self.rec_B_seg_sng = self.split(self.rec_B_sng)  # 暂定self.rec_B_img_sng用于计算IS（inception score）
+				# fake_A_seg_list = self.fake_A_seg_list + [self.fake_A_seg_sng]  # not detach
+				# for i in range(self.ins_iter - idx - 1):
+				# 	fake_A_seg_list.append(empty)
+                #
+                # self.fake_A_seg_mul = torch.cat(fake_A_seg_list, dim=1)
+                # self.fake_A_mul = torch.cat([self.fake_A_img_sng, self.fake_A_seg_mul], dim=1)
+
+				# self.fake_A_img_sng = self.fake_A_sng
+				# self.fake_A_mul = self.fake_A_fuse_sng
+				self.fake_A_mul = self.fake_A_sng
+				# self.rec_B_img_sng = self.rec_B_sng
+			else:
+				self.real_B_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
+				self.fake_A_sng = self.netG_B(self.real_B_sng)
+				self.rec_B_sng = self.netG_A(self.fake_A_sng)
+
+				self.fake_A_img_sng, self.fake_A_seg_sng = self.split(
+					self.fake_A_sng)  # 暂定self.fake_A_img_sng用于计算IS（inception score）
+				self.rec_B_img_sng, self.rec_B_seg_sng = self.split(
+					self.rec_B_sng)  # 暂定self.rec_B_img_sng用于计算IS（inception score）
+				fake_A_seg_list = self.fake_A_seg_list + [self.fake_A_seg_sng]  # not detach
+				for i in range(self.ins_iter - idx - 1):
+					fake_A_seg_list.append(empty)
+
+				self.fake_A_seg_mul = torch.cat(fake_A_seg_list, dim=1)
+				self.fake_A_mul = torch.cat([self.fake_A_img_sng, self.fake_A_seg_mul], dim=1)
 
 	def test(self):															# 用于test.py
 		# init setting														# 与optimize_parameters()相同的初始化
@@ -257,11 +361,26 @@ class InstaGANModel(BaseModel):
 
 		# backward A
 		if self.forward_A:
-			self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
-			self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
-			self.loss_idt_B = self.criterionIdt(self.netG_B(self.real_A_sng), self.real_A_sng.detach()) * lambda_A * lambda_idt
-			weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
-			self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng, weight=weight_A) * lambda_A * lambda_ctx
+			if self.opt.netG == 'star':
+				self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
+				# self.loss_cyc_A = self.criterionCyc(self.rec_A_fuse_sng, self.real_A_fuse_sng) * lambda_A
+				self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_fuse_sng) * lambda_A
+				# self.loss_idt_B = self.criterionIdt(self.netG_B(self.real_A_fuse_sng),self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
+
+				self.fake_A_sng_idt = self.netG_B(self.real_A_fuse_sng)
+				self.fake_A_img_idt,self.fake_A_fuse_idt = self.split(self.fake_A_sng_idt)
+				# self.loss_idt_B = self.criterionIdt(self.fake_A_fuse_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
+				self.loss_idt_B = self.criterionIdt(self.fake_A_sng_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
+
+				# weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
+				# self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
+			else:
+				self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
+				self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
+				self.loss_idt_B = self.criterionIdt(self.netG_B(self.real_A_sng),
+													self.real_A_sng.detach()) * lambda_A * lambda_idt
+				weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
+				self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
 		else:
 			self.loss_G_A = 0
 			self.loss_cyc_A = 0
@@ -270,11 +389,27 @@ class InstaGANModel(BaseModel):
 
 		# backward B
 		if self.forward_B:
-			self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
-			self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_sng) * lambda_B
-			self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_sng), self.real_B_sng.detach()) * lambda_B * lambda_idt
-			weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
-			self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng, weight=weight_B) * lambda_B * lambda_ctx
+			if self.opt.netG == 'star':
+				self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
+				# self.loss_cyc_B = self.criterionCyc(self.rec_B_fuse_sng, self.real_B_fuse_sng) * lambda_B
+				self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_fuse_sng) * lambda_B
+				# self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_fuse_sng),self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
+
+				self.fake_B_sng_idt = self.netG_A(self.real_B_fuse_sng)
+				self.fake_B_img_idt,self.fake_B_fuse_idt=self.split(self.fake_B_sng_idt)
+				# self.loss_idt_A = self.criterionIdt(self.fake_B_fuse_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
+				self.loss_idt_A = self.criterionIdt(self.fake_B_sng_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
+
+
+				# weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
+				# self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng,weight=weight_B) * lambda_B * lambda_ctx
+			else:
+				self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
+				self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_sng) * lambda_B
+				self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_sng),
+													self.real_B_sng.detach()) * lambda_B * lambda_idt
+				weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
+				self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng,weight=weight_B) * lambda_B * lambda_ctx
 		else:
 			self.loss_G_B = 0
 			self.loss_cyc_B = 0
@@ -282,7 +417,11 @@ class InstaGANModel(BaseModel):
 			self.loss_ctx_B = 0
 
 		# combined loss
-		self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
+		if self.opt.netG=='star':
+			self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B
+		else:
+			self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
+
 		self.loss_G.backward()	# 生成器A和生成器B的各种loss为总G的loss，反向传播
 
 	def gradient_penalty(self, y, x):
@@ -383,21 +522,41 @@ class InstaGANModel(BaseModel):
 				self.optimizer_D.step()										# 更新参数
 
 			# update setting for next iteration
-			self.real_A_img_sng = self.fake_B_img_sng.detach()
-			self.real_B_img_sng = self.fake_A_img_sng.detach()
-			self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
-			self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
-			self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
-			self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
+			if self.opt.netG=='star':
+				self.real_A_img_sng = self.fake_B_img_sng.detach()
+				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				# self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
+				# self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
+				# self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
+				# self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
 
-			# save visuals
-			if i == 0:  # first
-				self.rec_A_img = self.rec_A_img_sng
-				self.rec_B_img = self.rec_B_img_sng
-			if i == self.ins_iter - 1:  # last
-				self.fake_A_img = self.fake_A_img_sng
-				self.fake_B_img = self.fake_B_img_sng
-				self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
-				self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
-				self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
-				self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
+				# save visuals
+				if i == 0:  # first
+					self.rec_A_img = self.rec_A_img_sng
+					self.rec_B_img = self.rec_B_img_sng
+				if i == self.ins_iter - 1:  # last
+					self.fake_A_img = self.fake_A_img_sng
+					self.fake_B_img = self.fake_B_img_sng
+					# self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
+					# self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
+					# self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
+					# self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
+			else:
+				self.real_A_img_sng = self.fake_B_img_sng.detach()
+				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
+				self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
+				self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
+				self.rec_B_seg_list.append(self.rec_B_seg_sng.detach())
+
+				# save visuals
+				if i == 0:  # first
+					self.rec_A_img = self.rec_A_img_sng
+					self.rec_B_img = self.rec_B_img_sng
+				if i == self.ins_iter - 1:  # last
+					self.fake_A_img = self.fake_A_img_sng
+					self.fake_B_img = self.fake_B_img_sng
+					self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
+					self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
+					self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
+					self.rec_B_seg = self.merge_masks(torch.cat(self.rec_B_seg_list, dim=1))
