@@ -332,28 +332,78 @@ if __name__ == '__main__':
 
 
         if opt.compute_fid:
+            if opt.model=='cycle_gan':
+                is_fid_model = ScoreModel(mode=2, cuda=True)
 
-            is_fid_model = ScoreModel(mode=2, cuda=True)
+                # img_list_tensor1.append(visuals['real_A'])
+                # real_A_seg = visuals['real_A_seg']
+                # real_A_seg_channel3 = torch.cat([real_A_seg, real_A_seg, real_A_seg], dim=1)
+                # img_list_tensor1.append(real_A_seg_channel3)
 
-            # img_list_tensor1.append(visuals['real_A_img'])
-            # real_A_seg = visuals['real_A_seg']
-            # real_A_seg_channel3 = torch.cat([real_A_seg,real_A_seg,real_A_seg],dim=1)
-            # img_list_tensor1.append(real_A_seg_channel3)
+                img_list_tensor1.append(visuals['real_B'])
+                # real_B_seg = visuals['real_B_seg']
+                # real_B_seg_channel3 = torch.cat([real_B_seg, real_B_seg, real_B_seg], dim=1)
+                # img_list_tensor1.append(real_B_seg_channel3)
 
-            img_list_tensor1.append(visuals['real_B_img'])
-            # real_B_seg = visuals['real_B_seg']
-            # real_B_seg_channel3 = torch.cat([real_B_seg, real_B_seg, real_B_seg], dim=1)
-            # img_list_tensor1.append(real_B_seg_channel3)
+                # img_list_tensor2.append(visuals['fake_A'])
+                # fake_A_seg = visuals['fake_A_seg']
+                # fake_A_seg_channel3 = torch.cat([fake_A_seg, fake_A_seg, fake_A_seg], dim=1)
+                # img_list_tensor2.append(fake_A_seg_channel3)
 
-            # img_list_tensor2.append(visuals['fake_A_img'])
-            # fake_A_seg = visuals['fake_A_seg']
-            # fake_A_seg_channel3 = torch.cat([fake_A_seg, fake_A_seg, fake_A_seg], dim=1)
-            # img_list_tensor2.append(fake_A_seg_channel3)
+                img_list_tensor2.append(visuals['fake_B'])
+                # fake_B_seg = visuals['fake_B_seg']
+                # fake_B_seg_channel3 = torch.cat([fake_B_seg, fake_B_seg, fake_B_seg], dim=1)
+                # img_list_tensor2.append(fake_B_seg_channel3)
+            elif opt.model=='insta_gan' or opt.model=='dense_gan':
+                if opt.netG == 'star':
+                    is_fid_model = ScoreModel(mode=2, cuda=True)
 
-            img_list_tensor2.append(visuals['fake_B_img'])
-            # fake_B_seg = visuals['fake_B_seg']
-            # fake_B_seg_channel3 = torch.cat([fake_B_seg, fake_B_seg, fake_B_seg], dim=1)
-            # img_list_tensor2.append(fake_B_seg_channel3)
+                    # img_list_tensor1.append(visuals['real_A_img'])
+                    # real_A_seg = visuals['real_A_seg']
+                    # real_A_seg_channel3 = torch.cat([real_A_seg, real_A_seg, real_A_seg], dim=1)
+                    # img_list_tensor1.append(real_A_seg_channel3)
+
+                    img_list_tensor1.append(visuals['real_B_img'])
+                    # real_B_seg = visuals['real_B_seg']
+                    # real_B_seg_channel3 = torch.cat([real_B_seg, real_B_seg, real_B_seg], dim=1)
+                    # img_list_tensor1.append(real_B_seg_channel3)
+
+                    # img_list_tensor2.append(visuals['fake_A_img'])
+                    # fake_A_seg = visuals['fake_A_seg']
+                    # fake_A_seg_channel3 = torch.cat([fake_A_seg, fake_A_seg, fake_A_seg], dim=1)
+                    # img_list_tensor2.append(fake_A_seg_channel3)
+
+                    img_list_tensor2.append(visuals['fake_B_img'])
+                    # fake_B_seg = visuals['fake_B_seg']
+                    # fake_B_seg_channel3 = torch.cat([fake_B_seg, fake_B_seg, fake_B_seg], dim=1)
+                    # img_list_tensor2.append(fake_B_seg_channel3)
+                else:
+                    is_fid_model = ScoreModel(mode=2, cuda=True)
+
+                    # img_list_tensor1.append(visuals['real_A_img'])
+                    # real_A_seg = visuals['real_A_seg']
+                    # real_A_seg_channel3 = torch.cat([real_A_seg, real_A_seg, real_A_seg], dim=1)
+                    # img_list_tensor1.append(real_A_seg_channel3)
+
+                    img_list_tensor1.append(visuals['real_B_img'])
+                    # real_B_seg = visuals['real_B_seg']
+                    # real_B_seg_channel3 = torch.cat([real_B_seg, real_B_seg, real_B_seg], dim=1)
+                    # img_list_tensor1.append(real_B_seg_channel3)
+
+                    # img_list_tensor2.append(visuals['fake_A_img'])
+                    # fake_A_seg = visuals['fake_A_seg']
+                    # fake_A_seg_channel3 = torch.cat([fake_A_seg, fake_A_seg, fake_A_seg], dim=1)
+                    # img_list_tensor2.append(fake_A_seg_channel3)
+
+                    img_list_tensor2.append(visuals['fake_B_img'])
+                    # fake_B_seg = visuals['fake_B_seg']
+                    # fake_B_seg_channel3 = torch.cat([fake_B_seg, fake_B_seg, fake_B_seg], dim=1)
+                    # img_list_tensor2.append(fake_B_seg_channel3)
+
+
+            else:
+                pass
+
 
 
 

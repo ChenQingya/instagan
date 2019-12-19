@@ -75,21 +75,22 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_G(input_nc, ins_per,output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
-    img_size = 224
+
     if netG == 'basic':
-        net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
+        net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9)
     elif netG == 'set':
-        net = ResnetSetGenerator(input_nc, output_nc, img_size, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
-        # net = ResnetCAMGenerator(input_nc=5, output_nc=5, ngf=64, n_blocks=6, img_size=224, light=True)
+        net = ResnetSetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9)
+    elif netG == 'star':
+        net = StarGenerator(input_nc,ins_per, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=9)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
-def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_D(input_nc, ins_per, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -97,6 +98,8 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False,
         net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
     elif netD == 'set':
         net = NLayerSetDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
+    elif netD == 'star':
+        net = StarDiscriminator(input_nc, ins_per, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % net)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -113,33 +116,33 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', use_sigmoid=False,
 # that has the same size as the input
 # 计算ganloss，已知常规形式：loss（output，target）。这里output就是以下的self.input，target就是target_real_label.
 # 注意loss（output，target），在此处，output和target都是tensor
-# class GANLoss(nn.Module):
-#     def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0):
-#         super(GANLoss, self).__init__()
-#         self.register_buffer('real_label', torch.tensor(target_real_label))
-#         self.register_buffer('fake_label', torch.tensor(target_fake_label))
-#         if use_lsgan:
-#             self.loss = nn.MSELoss()
-#         else:
-#             self.loss = nn.BCELoss()
-#
-#     # 将target_is_real（形式很有可能是boolean，比如True或False）转成tensor，且大小和input一致
-#     def get_target_tensor(self, input, target_is_real):
-#         if target_is_real:
-#             target_tensor = self.real_label
-#         else:
-#             target_tensor = self.fake_label
-#         return target_tensor.expand_as(input)
-#
-#     def __call__(self, input, target_is_real):
-#         target_tensor = self.get_target_tensor(input, target_is_real)
-#         return self.loss(input, target_tensor)
-
 class GANLoss(nn.Module):
+    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0):
+        super(GANLoss, self).__init__()
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        if use_lsgan:
+            self.loss = nn.MSELoss()
+        else:
+            self.loss = nn.BCELoss()
+
+    # 将target_is_real（形式很有可能是boolean，比如True或False）转成tensor，且大小和input一致
+    def get_target_tensor(self, input, target_is_real):
+        if target_is_real:
+            target_tensor = self.real_label
+        else:
+            target_tensor = self.fake_label
+        return target_tensor.expand_as(input)
+
+    def __call__(self, input, target_is_real):
+        target_tensor = self.get_target_tensor(input, target_is_real)
+        return self.loss(input, target_tensor)
+
+class CAMGANLoss(nn.Module):
 	def __init__(
 			self, use_l1=True, target_real_label=1.0,
 			target_fake_label=0.0, tensor=torch.FloatTensor):
-		super(GANLoss, self).__init__()
+		super(CAMGANLoss, self).__init__()
 		self.real_label = target_real_label
 		self.fake_label = target_fake_label
 		self.real_label_var = None
@@ -177,7 +180,7 @@ class DiscLoss:
         return 'DiscLoss'
 
     def __init__(self, opt, tensor):
-        self.criterionGAN = GANLoss(use_l1=False, tensor=tensor)
+        self.criterionGAN = CAMGANLoss(use_l1=False, tensor=tensor)
         self.fake_AB_pool = ImagePool(opt.pool_size)
 
     def get_g_loss(self, net, realA, fakeB):
@@ -207,7 +210,7 @@ class DiscLossLS(DiscLoss):
     def __init__(self, opt, tensor):
         super(DiscLossLS, self).__init__(opt, tensor)
         # DiscLoss.initialize(self, opt, tensor)
-        self.criterionGAN = GANLoss(use_l1=True, tensor=tensor)
+        self.criterionGAN = CAMGANLoss(use_l1=True, tensor=tensor)
 
     def get_g_loss(self, net, realA, fakeB):
         return DiscLoss.get_g_loss(self, net, realA, fakeB)
@@ -377,7 +380,7 @@ class ResnetGenerator(nn.Module):   # 使用resnet作为生成器的backbone net
 # ResNet generator for "set" of instance attributes
 # See https://openreview.net/forum?id=ryxwJhC9YX for details
 class ResnetSetGenerator(nn.Module):
-    def __init__(self, input_nc, output_nc, img_size, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect'):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect'):
         assert (n_blocks >= 0)
         super(ResnetSetGenerator, self).__init__()
         self.input_nc = input_nc
@@ -391,44 +394,8 @@ class ResnetSetGenerator(nn.Module):
         n_downsampling = 2
         self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
         self.encoder_seg = self.get_encoder(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)   # 2*ngf,此时新的ngf变成128
-        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)           # 3*ngf,因为输入的channel大小是3倍
-        self.light = True
-        self.FC = self.get_FC(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, img_size)
-
-        mult = 2 ** n_downsampling
-
-        # Class Activation Map
-        self.gap_fc = nn.Linear(ngf * mult, 1, bias=False)
-        self.gmp_fc = nn.Linear(ngf * mult, 1, bias=False)
-        self.conv1x1 = nn.Conv2d(ngf * mult * 2, ngf * mult, kernel_size=1, stride=1, bias=True)
-        self.relu = nn.ReLU(True)
-
-        # Gamma, Beta block
-        self.gamma = nn.Linear(ngf * mult, ngf * mult, bias=False)
-        self.beta = nn.Linear(ngf * mult, ngf * mult, bias=False)
-
-        self.n_blocks = n_blocks
-
-        for i in range(n_blocks):
-            # model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
-            #model += [ResnetAdaILNBlock(ngf * mult, use_bias=use_bias)]
-            setattr(self, 'UpBlock1_' + str(i + 1), ResnetAdaILNBlock(ngf * mult, use_bias=False))
-
-    def get_FC(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias, img_size):
-        mult = 2 ** n_downsampling
-
-        if self.light:
-            FC = [nn.Linear(ngf * mult, ngf * mult, bias=False),
-                  nn.ReLU(True),
-                  nn.Linear(ngf * mult, ngf * mult, bias=False),
-                  nn.ReLU(True)]
-        else:
-            FC = [nn.Linear(img_size // mult * img_size // mult * ngf * mult, ngf * mult, bias=False),
-                  nn.ReLU(True),
-                  nn.Linear(ngf * mult, ngf * mult, bias=False),
-                  nn.ReLU(True)]
-        return nn.Sequential(*FC)
+        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 3*ngf
 
     def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias):
         model = [nn.ReflectionPad2d(3),
@@ -442,10 +409,9 @@ class ResnetSetGenerator(nn.Module):
                       norm_layer(ngf * mult * 2),
                       nn.ReLU(True)]
 
-        # mult = 2 ** n_downsampling
-        # for i in range(n_blocks):
-        #   model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
-        #   model += [ResnetAdaILNBlock(ngf * mult, use_bias=use_bias)]
+        mult = 2 ** n_downsampling
+        for i in range(n_blocks):
+            model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
 
         return nn.Sequential(*model)
 
@@ -456,7 +422,6 @@ class ResnetSetGenerator(nn.Module):
             model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=2, padding=1, output_padding=1, bias=use_bias),
                       norm_layer(int(ngf * mult / 2)),
                       nn.ReLU(True)]
-            # model += [UpsampleConvLayer(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=1, upsample=2)]
         model += [nn.ReflectionPad2d(3)]
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
@@ -471,141 +436,103 @@ class ResnetSetGenerator(nn.Module):
             mean[0] = 1  # forward at least one segmentation
 
         # run encoder
-        enc_img = self.encoder_img(img)                             # enc_img:torch.Size([1, 256, 50, 50]) encoder没有改变ｘ[1,256,50,50]的大小
-        x = enc_img
-        gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
-        gap_logit = self.gap_fc(gap.view(x.shape[0], -1))
-        gap_weight = list(self.gap_fc.parameters())[0]
-        gap = x * gap_weight.unsqueeze(2).unsqueeze(3)
-
-        gmp = torch.nn.functional.adaptive_max_pool2d(x, 1)
-        gmp_logit = self.gmp_fc(gmp.view(x.shape[0], -1))
-        gmp_weight = list(self.gmp_fc.parameters())[0]
-        gmp = x * gmp_weight.unsqueeze(2).unsqueeze(3)
-
-        cam_logit = torch.cat([gap_logit, gmp_logit], 1)
-        x = torch.cat([gap, gmp], 1)
-        x = self.relu(self.conv1x1(x))
-
-        heatmap = torch.sum(x, dim=1, keepdim=True)
-
-        if self.light:
-            x_ = torch.nn.functional.adaptive_avg_pool2d(x, 1)
-            x_ = self.FC(x_.view(x_.shape[0], -1))
-        else:
-            x_ = self.FC(x.view(x.shape[0], -1))
-        gamma, beta = self.gamma(x_), self.beta(x_)
-
-        #resnet_adaILN_img = self.resnet_adaILN_img(x,gamma, beta)
-        for i in range(self.n_blocks):
-            x = getattr(self, 'UpBlock1_' + str(i+1))(x, gamma, beta)
-
+        enc_img = self.encoder_img(img)
         enc_segs = list()
         for i in range(segs.size(1)):
-            if mean[i] > 0:                                         # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)                 # seg:torch.Size([1, 1, 200, 200])
-                enc_segs.append(self.encoder_seg(seg))              # self.encoder_seg(seg)的结果torch.Size([1, 256, 50, 50]),总共append两次
+            if mean[i] > 0:  # skip empty segmentation
+                seg = segs[:, i, :, :].unsqueeze(1)
+                enc_segs.append(self.encoder_seg(seg))
         enc_segs = torch.cat(enc_segs)
-        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)     # enc_segs_sum:torch.Size([1, 256, 50, 50])
-                                                                    #  aggregated set feature
+        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
 
         # run decoder
-        feat = torch.cat([enc_img, enc_segs_sum], dim=1)            # feat:torch.Size([1, 512, 50, 50])
+        feat = torch.cat([enc_img, enc_segs_sum], dim=1)
         out = [self.decoder_img(feat)]
         idx = 0
         for i in range(segs.size(1)):
             if mean[i] > 0:
-                enc_seg = enc_segs[idx].unsqueeze(0)                # (1, ngf, w, h)
+                enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
                 idx += 1  # move to next index
                 feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
                 out += [self.decoder_seg(feat)]
             else:
-                out += [segs[:, i, :, :].unsqueeze(1)]              # skip empty segmentation
+                out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
         return torch.cat(out, dim=1)
 
-class UpsampleConvLayer(torch.nn.Module):
-    """UpsampleConvLayer
-    Upsamples the input and then does a convolution. This method gives better results
-    compared to ConvTranspose2d.
-    ref: http://distill.pub/2016/deconv-checkerboard/
-    """
+class StarGenerator(nn.Module):
+    def __init__(self, input_nc, ins_per, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=9, padding_type='reflect'):
+        assert(n_blocks >= 0)   # 默认9个resnet block
+        super(StarGenerator, self).__init__()
+        self.input_nc = input_nc
+        self.output_nc = output_nc
+        self.ngf = ngf
+        if type(norm_layer) == functools.partial:           # functools.partial：是一种类型。输入：type(functools.partial),输出type. 判断norm_layer的类型是不是偏函数
+            use_bias = norm_layer.func == nn.InstanceNorm2d # 是偏函数
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d      # 不是偏函数
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride, upsample=None):
-        super(UpsampleConvLayer, self).__init__()
-        self.upsample = upsample
-        reflection_padding = kernel_size // 2
-        self.reflection_pad = torch.nn.ReflectionPad2d(reflection_padding)
-        self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride)
+        model = [nn.ReflectionPad2d(3),     # [1,3,206,206]
+                                                            #  加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
+                 nn.Conv2d(input_nc+ins_per, ngf, kernel_size=7, padding=0,
+                           bias=use_bias),  # [1,64,200,200]
+                 norm_layer(ngf),           # [1,64,200,200]instancenorm的输出大小与输入相同
+                 nn.ReLU(True)]             # [1,64,200,200]与输入相同
+        model_fuse = [nn.ReflectionPad2d(3),  # [1,3,206,206]
+                 #  加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
+                 nn.Conv2d(input_nc + ins_per, ngf, kernel_size=7, padding=0,
+                           bias=use_bias),  # [1,64,200,200]
+                 norm_layer(ngf),  # [1,64,200,200]instancenorm的输出大小与输入相同
+                 nn.ReLU(True)]  # [1,64,200,200]与输入相同
 
-    def forward(self, x):
-        x_in = x
-        if self.upsample:
-            x_in = torch.nn.functional.interpolate(x_in, mode='nearest', scale_factor=self.upsample)
-        out = self.reflection_pad(x_in)
-        out = self.conv2d(out)
-        return out
+        n_downsampling = 2
+        for i in range(n_downsampling):
+            mult = 2**i # 计算2的i次方
+            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
+                                stride=2, padding=1, bias=use_bias),
+                      norm_layer(ngf * mult * 2),
+                      nn.ReLU(True)]
+            model_fuse += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
+                                stride=2, padding=1, bias=use_bias),
+                      norm_layer(ngf * mult * 2),
+                      nn.ReLU(True)]
 
-class adaILN(nn.Module):
-    def __init__(self, num_features, eps=1e-5):
-        super(adaILN, self).__init__()
-        self.eps = eps
-        self.rho = Parameter(torch.Tensor(1, num_features, 1, 1))
-        self.rho.data.fill_(0.9)
+        mult = 2**n_downsampling
+        for i in range(n_blocks):
+            model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
+            model_fuse += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
 
-    def forward(self, input, gamma, beta):
-        in_mean, in_var = torch.mean(torch.mean(input, dim=2, keepdim=True), dim=3, keepdim=True), torch.var(torch.var(input, dim=2, keepdim=True), dim=3, keepdim=True)
-        out_in = (input - in_mean) / torch.sqrt(in_var + self.eps)
-        ln_mean, ln_var = torch.mean(torch.mean(torch.mean(input, dim=1, keepdim=True), dim=2, keepdim=True), dim=3, keepdim=True), torch.var(torch.var(torch.var(input, dim=1, keepdim=True), dim=2, keepdim=True), dim=3, keepdim=True)
-        out_ln = (input - ln_mean) / torch.sqrt(ln_var + self.eps)
-        out = self.rho.expand(input.shape[0], -1, -1, -1) * out_in + (1-self.rho.expand(input.shape[0], -1, -1, -1)) * out_ln
-        out = out * gamma.unsqueeze(2).unsqueeze(3) + beta.unsqueeze(2).unsqueeze(3)
+        for i in range(n_downsampling):
+            mult = 2**(n_downsampling - i)
+            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+                                         kernel_size=3, stride=2,
+                                         padding=1, output_padding=1,
+                                         bias=use_bias),
+                      norm_layer(int(ngf * mult / 2)),
+                      nn.ReLU(True)]
+            model_fuse += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+                                         kernel_size=3, stride=2,
+                                         padding=1, output_padding=1,
+                                         bias=use_bias),
+                      norm_layer(int(ngf * mult / 2)),
+                      nn.ReLU(True)]
+        model += [nn.ReflectionPad2d(3)]
+        model_fuse += [nn.ReflectionPad2d(3)]
+        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        # model_fuse += [nn.Conv2d(ngf, output_nc+ins_per, kernel_size=7, padding=0)]
+        model_fuse += [nn.Conv2d(ngf, ins_per, kernel_size=7, padding=0)]
+        model += [nn.Tanh()]
+        model_fuse += [nn.Tanh()]
 
-        return out
-
-class ILN(nn.Module):
-    def __init__(self, num_features, eps=1e-5):
-        super(ILN, self).__init__()
-        self.eps = eps
-        self.rho = Parameter(torch.Tensor(1, num_features, 1, 1))
-        self.gamma = Parameter(torch.Tensor(1, num_features, 1, 1))
-        self.beta = Parameter(torch.Tensor(1, num_features, 1, 1))
-        self.rho.data.fill_(0.0)
-        self.gamma.data.fill_(1.0)
-        self.beta.data.fill_(0.0)
+        self.model = nn.Sequential(*model)
+        self.model_fuse = nn.Sequential(*model_fuse)
 
     def forward(self, input):
-        in_mean, in_var = torch.mean(torch.mean(input, dim=2, keepdim=True), dim=3, keepdim=True), torch.var(torch.var(input, dim=2, keepdim=True), dim=3, keepdim=True)
-        out_in = (input - in_mean) / torch.sqrt(in_var + self.eps)
-        ln_mean, ln_var = torch.mean(torch.mean(torch.mean(input, dim=1, keepdim=True), dim=2, keepdim=True), dim=3, keepdim=True), torch.var(torch.var(torch.var(input, dim=1, keepdim=True), dim=2, keepdim=True), dim=3, keepdim=True)
-        out_ln = (input - ln_mean) / torch.sqrt(ln_var + self.eps)
-        out = self.rho.expand(input.shape[0], -1, -1, -1) * out_in + (1-self.rho.expand(input.shape[0], -1, -1, -1)) * out_ln
-        out = out * self.gamma.expand(input.shape[0], -1, -1, -1) + self.beta.expand(input.shape[0], -1, -1, -1)
-
-        return out
-
-
-class ResnetAdaILNBlock(nn.Module):
-    def __init__(self, dim, use_bias):
-        super(ResnetAdaILNBlock, self).__init__()
-        self.pad1 = nn.ReflectionPad2d(1)
-        self.conv1 = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=0, bias=use_bias)
-        self.norm1 = adaILN(dim)
-        self.relu1 = nn.ReLU(True)
-
-        self.pad2 = nn.ReflectionPad2d(1)
-        self.conv2 = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=0, bias=use_bias)
-        self.norm2 = adaILN(dim)
-
-    def forward(self, x, gamma, beta):
-        out = self.pad1(x)
-        out = self.conv1(out)
-        out = self.norm1(out, gamma, beta)
-        out = self.relu1(out)
-        out = self.pad2(out)
-        out = self.conv2(out)
-        out = self.norm2(out, gamma, beta)
-
-        return out + x
+        out=[]
+        result=self.model(input)
+        result_fuse=self.model_fuse(input)
+        out.append(result)
+        out.append(result_fuse)
+        return torch.cat(out, dim=1)
 
 # Define a resnet block
 class ResnetBlock(nn.Module):
@@ -779,6 +706,53 @@ class NLayerDiscriminator(nn.Module):
     def forward(self, input):
         return self.model(input)
 
+class StarDiscriminator(nn.Module):
+    def __init__(self, input_nc, ins_per, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
+        super(StarDiscriminator, self).__init__()
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
+        kw = 4
+        padw = 1
+        sequence = [
+            # Use spectral normalization
+            SpectralNorm(nn.Conv2d(input_nc+ins_per, ndf, kernel_size=kw, stride=2, padding=padw)),
+            nn.LeakyReLU(0.2, True)
+        ]
+
+        nf_mult = 1
+        nf_mult_prev = 1
+        for n in range(1, n_layers):
+            nf_mult_prev = nf_mult
+            nf_mult = min(2**n, 8)
+            sequence += [
+                # Use spectral normalization
+                SpectralNorm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias)),
+                norm_layer(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True)
+            ]
+
+        nf_mult_prev = nf_mult
+        nf_mult = min(2**n_layers, 8)
+        sequence += [
+            # Use spectral normalization
+            SpectralNorm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias)),
+            norm_layer(ndf * nf_mult),
+            nn.LeakyReLU(0.2, True)
+        ]
+
+        # Use spectral normalization
+        sequence += [SpectralNorm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw))]
+
+        if use_sigmoid:
+            sequence += [nn.Sigmoid()]
+
+        self.model = nn.Sequential(*sequence)
+
+    def forward(self, input):
+        return self.model(input)
 
 # PatchGAN discriminator for "set" of instance attributes
 # See https://openreview.net/forum?id=ryxwJhC9YX for details
@@ -833,14 +807,14 @@ class NLayerSetDiscriminator(nn.Module):
 
     def forward(self, inp):
         # split data
-        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
+        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H) torch.Size([1, 3, 224, 224])
+        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H) torch.Size([1, 4, 224, 224])
         mean = (segs + 1).mean(0).mean(-1).mean(-1)
         if mean.sum() == 0:
             mean[0] = 1  # forward at least one segmentation
 
         # run feature extractor
-        feat_img = self.feature_img(img)
+        feat_img = self.feature_img(img)    # feat_img:=torch.Size([1, 256, 28, 28])
         feat_segs = list()
         for i in range(segs.size(1)):
             if mean[i] > 0:  # skip empty segmentation
@@ -849,8 +823,8 @@ class NLayerSetDiscriminator(nn.Module):
         feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
 
         # run classifier
-        feat = torch.cat([feat_img, feat_segs_sum], dim=1)
-        out = self.classifier(feat)
+        feat = torch.cat([feat_img, feat_segs_sum], dim=1)  # feat:torch.Size([1, 512, 28, 28])
+        out = self.classifier(feat)                         # out:torch.Size([1, 1, 26, 26])
         return out
 
 
