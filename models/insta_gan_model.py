@@ -223,13 +223,13 @@ class InstaGANModel(BaseModel):
 				# self.optimizers.append(self.optimizer_G)
 				# self.optimizers.append(self.optimizer_D)
 
-				self.fake_B_sng = self.netG_A(self.real_A_fuse_sng)  # (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
-				self.fake_B_img_sng, self.fake_B_fuse_sng = self.split(self.fake_B_sng)
+				self.fake_B_fuse_sng = self.netG_A(self.real_A_fuse_sng)  # (原图image和掩码)即(self.real_A_sng)作为一个整体输入到生成器
+				self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_fuse_sng)
 				# self.rec_A_sng = self.netG_B(self.fake_B_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
 
 				# self.rec_A_sng = self.netG_B(self.fake_B_fuse_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
-				self.rec_A_sng = self.netG_B(self.fake_B_sng)  # 生成的假的domain B的图（self.fake_B_sng），再输入到G_B进行reconstruc
-				self.rec_A_img_sng, self.rec_A_fuse_sng = self.split(self.rec_A_sng)
+				self.rec_A_fuse_sng = self.netG_B(self.fake_B_fuse_sng)  # 生成的假的domain B的图（self.fake_B_fuse_sng），再输入到G_B进行reconstruc
+				self.rec_A_img_sng, self.rec_A_seg_sng = self.split(self.rec_A_fuse_sng)
 
 				# self.fake_B_img_sng, self.fake_B_seg_sng = self.split(self.fake_B_sng)  # 生成的假的domain B的图:split分为domainB的假的img和假的seg。
 				#  暂定self.fake_B_img_sng用于计算IS（inception score）,作为inception网络的输入
@@ -243,7 +243,7 @@ class InstaGANModel(BaseModel):
 				# self.fake_B_mul = torch.cat([self.fake_B_img_sng, self.fake_B_seg_mul],dim=1)  # self.fake_B_mul是假的domainB的结果，用于计算loss
 
 				# self.fake_B_mul = self.fake_B_fuse_sng  # self.fake_B_mul是假的domainB的结果，用于计算loss
-				self.fake_B_mul = self.fake_B_sng  # self.fake_B_mul是假的domainB的结果，用于计算loss
+				self.fake_B_mul = self.fake_B_fuse_sng  # self.fake_B_mul是假的domainB的结果，用于计算loss
 
 
 			else:
@@ -282,12 +282,12 @@ class InstaGANModel(BaseModel):
 			if self.opt.netG == 'star':
 				# self.real_B_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
 				self.real_B_fuse_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
-				self.fake_A_sng = self.netG_B(self.real_B_fuse_sng)
-				self.fake_A_img_sng, self.fake_A_fuse_sng = self.split(self.fake_A_sng)
+				self.fake_A_fuse_sng = self.netG_B(self.real_B_fuse_sng)
+				self.fake_A_img_sng, self.fake_A_seg_sng = self.split(self.fake_A_fuse_sng)
 
 				# self.rec_B_sng = self.netG_A(self.fake_A_fuse_sng)
-				self.rec_B_sng = self.netG_A(self.fake_A_sng)
-				self.rec_B_img_sng, self.rec_B_fuse_sng = self.split(self.rec_B_sng)
+				self.rec_B_fuse_sng = self.netG_A(self.fake_A_fuse_sng)
+				self.rec_B_img_sng, self.rec_B_seg_sng = self.split(self.rec_B_fuse_sng)
 
 				# self.fake_A_img_sng, self.fake_A_seg_sng = self.split(self.fake_A_sng)  # 暂定self.fake_A_img_sng用于计算IS（inception score）
 				# self.rec_B_img_sng, self.rec_B_seg_sng = self.split(self.rec_B_sng)  # 暂定self.rec_B_img_sng用于计算IS（inception score）
@@ -300,7 +300,7 @@ class InstaGANModel(BaseModel):
 
 				# self.fake_A_img_sng = self.fake_A_sng
 				# self.fake_A_mul = self.fake_A_fuse_sng
-				self.fake_A_mul = self.fake_A_sng
+				self.fake_A_mul = self.fake_A_fuse_sng
 				# self.rec_B_img_sng = self.rec_B_sng
 			else:
 				self.real_B_sng = torch.cat([self.real_B_img_sng, self.real_B_seg_sng], dim=1)
@@ -386,13 +386,13 @@ class InstaGANModel(BaseModel):
 			if self.opt.netG == 'star':
 				self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
 				# self.loss_cyc_A = self.criterionCyc(self.rec_A_fuse_sng, self.real_A_fuse_sng) * lambda_A
-				self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_fuse_sng) * lambda_A
+				self.loss_cyc_A = self.criterionCyc(self.rec_A_fuse_sng, self.real_A_fuse_sng) * lambda_A
 				# self.loss_idt_B = self.criterionIdt(self.netG_B(self.real_A_fuse_sng),self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
 
-				self.fake_A_sng_idt = self.netG_B(self.real_A_fuse_sng)
-				self.fake_A_img_idt,self.fake_A_fuse_idt = self.split(self.fake_A_sng_idt)
+				self.fake_A_fuse_sng_idt = self.netG_B(self.real_A_fuse_sng)
+				self.fake_A_img_sng_idt,self.fake_A_seg_sng_idt = self.split(self.fake_A_fuse_sng_idt)
 				# self.loss_idt_B = self.criterionIdt(self.fake_A_fuse_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
-				self.loss_idt_B = self.criterionIdt(self.fake_A_sng_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
+				self.loss_idt_B = self.criterionIdt(self.fake_A_fuse_sng_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
 
 				# weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
 				# self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
@@ -414,13 +414,13 @@ class InstaGANModel(BaseModel):
 			if self.opt.netG == 'star':
 				self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
 				# self.loss_cyc_B = self.criterionCyc(self.rec_B_fuse_sng, self.real_B_fuse_sng) * lambda_B
-				self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_fuse_sng) * lambda_B
+				self.loss_cyc_B = self.criterionCyc(self.rec_B_fuse_sng, self.real_B_fuse_sng) * lambda_B
 				# self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_fuse_sng),self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
 
-				self.fake_B_sng_idt = self.netG_A(self.real_B_fuse_sng)
-				self.fake_B_img_idt,self.fake_B_fuse_idt=self.split(self.fake_B_sng_idt)
+				self.fake_B_fuse_sng_idt = self.netG_A(self.real_B_fuse_sng)
+				self.fake_B_img_sng_idt,self.fake_B_seg_sng_idt=self.split(self.fake_B_fuse_sng_idt)
 				# self.loss_idt_A = self.criterionIdt(self.fake_B_fuse_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
-				self.loss_idt_A = self.criterionIdt(self.fake_B_sng_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
+				self.loss_idt_A = self.criterionIdt(self.fake_B_fuse_sng_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
 
 
 				# weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
