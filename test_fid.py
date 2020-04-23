@@ -342,8 +342,8 @@ if __name__ == '__main__':
                 # real_A_seg_channel3 = torch.cat([real_A_seg, real_A_seg, real_A_seg], dim=1)
                 # img_list_tensor1.append(real_A_seg_channel3)
 
-                img_list_tensor1.append(visuals['real_A_img']) if is_AtoB else img_list_tensor1.append(
-                    visuals['real_B_img'])
+                img_list_tensor1.append(visuals['real_A']) if is_AtoB else img_list_tensor1.append(
+                    visuals['real_B'])
                 # real_B_seg = visuals['real_B_seg']
                 # real_B_seg_channel3 = torch.cat([real_B_seg, real_B_seg, real_B_seg], dim=1)
                 # img_list_tensor1.append(real_B_seg_channel3)
@@ -353,8 +353,8 @@ if __name__ == '__main__':
                 # fake_A_seg_channel3 = torch.cat([fake_A_seg, fake_A_seg, fake_A_seg], dim=1)
                 # img_list_tensor2.append(fake_A_seg_channel3)
 
-                img_list_tensor2.append(visuals['fake_A_img']) if is_AtoB else img_list_tensor2.append(
-                    visuals['fake_B_img'])
+                img_list_tensor2.append(visuals['fake_A']) if is_AtoB else img_list_tensor2.append(
+                    visuals['fake_B'])
                 # fake_B_seg = visuals['fake_B_seg']
                 # fake_B_seg_channel3 = torch.cat([fake_B_seg, fake_B_seg, fake_B_seg], dim=1)
                 # img_list_tensor2.append(fake_B_seg_channel3)
