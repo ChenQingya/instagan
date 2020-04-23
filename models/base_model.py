@@ -61,6 +61,11 @@ class BaseModel():
     def get_image_paths(self):
         return self.image_paths
 
+    # get AtoB
+    def get_AtoB(self):
+        self.AtoB = self.opt.direction == 'AtoB'
+        return self.AtoB
+
     def optimize_parameters(self):
         pass
 
