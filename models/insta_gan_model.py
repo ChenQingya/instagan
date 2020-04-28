@@ -394,8 +394,8 @@ class InstaGANModel(BaseModel):
 				# self.loss_idt_B = self.criterionIdt(self.fake_A_fuse_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
 				self.loss_idt_B = self.criterionIdt(self.fake_A_fuse_sng_idt, self.real_A_fuse_sng.detach()) * lambda_A * lambda_idt
 
-				weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
-				self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
+				# weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
+				# self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
 			else:
 				self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
 				self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
@@ -423,8 +423,8 @@ class InstaGANModel(BaseModel):
 				self.loss_idt_A = self.criterionIdt(self.fake_B_fuse_sng_idt,self.real_B_fuse_sng.detach()) * lambda_B * lambda_idt
 
 
-				weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
-				self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng,weight=weight_B) * lambda_B * lambda_ctx
+				# weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
+				# self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng,weight=weight_B) * lambda_B * lambda_ctx
 			else:
 				self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
 				self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_sng) * lambda_B
