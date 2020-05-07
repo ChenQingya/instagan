@@ -7,6 +7,8 @@ from . import networks
 import numpy as np
 import copy
 
+from contextualloss.contextual_loss import Contextual_Loss
+import torch.nn.functional as F
 
 class InstaGANModel(BaseModel):
 	def name(self):
@@ -397,6 +399,18 @@ class InstaGANModel(BaseModel):
 
 				# weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
 				# self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng,weight=weight_A) * lambda_A * lambda_ctx
+
+				# self.loss_cx_A =
+				layers = {
+					"conv_1_1": 1.0,
+					"conv_3_2": 1.0
+				}
+				I = torch.rand(1, 3, 128, 128).cuda()
+				T = torch.randn(1, 3, 128, 128).cuda()
+				I = self.fake_B_mul  # 生成的B域的图
+				T = self.real_B_fuse_sng  # 目标域B的真实图
+				contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
+				print('cxloss_A', contex_loss(I, T))
 			else:
 				self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
 				self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
@@ -426,6 +440,19 @@ class InstaGANModel(BaseModel):
 
 				# weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
 				# self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng,weight=weight_B) * lambda_B * lambda_ctx
+
+				# self.loss_cx_A =
+				layers = {
+					"conv_1_1": 1.0,
+					"conv_3_2": 1.0
+				}
+				I = torch.rand(1, 3, 128, 128).cuda()
+				T = torch.randn(1, 3, 128, 128).cuda()
+				I = self.fake_A_mul  # 生成的B域的图
+				T = self.real_A_fuse_sng  # 目标域B的真实图
+				contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
+				print('cxloss_B', contex_loss(I, T))
+
 			else:
 				self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
 				self.loss_cyc_B = self.criterionCyc(self.rec_B_sng, self.real_B_sng) * lambda_B
