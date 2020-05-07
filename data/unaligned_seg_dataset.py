@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 import os.path
 from data.base_dataset import BaseDataset, get_transform
