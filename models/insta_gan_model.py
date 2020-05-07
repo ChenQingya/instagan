@@ -436,7 +436,7 @@ class InstaGANModel(BaseModel):
                 T = self.real_B_fuse_sng  # 目标域B的真实图
                 contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
                 # print('cxloss_A', contex_loss(I, T))
-                cxloss_A = contex_loss(I, T)
+                self.loss_cxloss_A = contex_loss(I, T)[0] * lambda_A * lambda_ctx
             else:
                 self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B_mul), True)
                 self.loss_cyc_A = self.criterionCyc(self.rec_A_sng, self.real_A_sng) * lambda_A
@@ -479,7 +479,7 @@ class InstaGANModel(BaseModel):
                 T = self.real_A_fuse_sng  # 目标域B的真实图
                 contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
                 # print('cxloss_B', contex_loss(I, T))
-                cxloss_B = contex_loss(I, T)
+                self.loss_cxloss_B = contex_loss(I, T)[0] * lambda_B * lambda_ctx
 
             else:
                 self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A_mul), True)
@@ -497,7 +497,7 @@ class InstaGANModel(BaseModel):
 
         # combined loss
         if self.opt.netG == 'star':
-            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B
+            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_cxloss_A + self.loss_cxloss_B
         else:
             self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
 
