@@ -5,6 +5,10 @@ from .base_model import BaseModel
 from . import networks
 import numpy as np
 import copy
+from torchvision import transforms
+from PIL import Image
+from util import util
+import os
 
 
 class InstaGANModel(BaseModel):
@@ -148,12 +152,44 @@ class InstaGANModel(BaseModel):
 
     def merge_masks(self, segs):
         """Merge masks (B, N, W, H) -> (B, 1, W, H)"""
-        ret = torch.sum((segs + 1) / 2, dim=1, keepdim=True)  # (B, 1, W, H)
+        ret = torch.sum((segs + 1) / 2, dim=1, keepdim=True)  				# (B, 1, W, H)
+        '''image_numpy = util.tensor2im(segs)
+        image_pil = Image.fromarray(image_numpy)
+        image_pil.show()
+
+        retclamp = ret.clamp(max=1, min=0) * 2 - 1
+        ret_image_numpy = util.tensor2im(retclamp)
+        ret_image_pil = Image.fromarray(ret_image_numpy)
+        ret_image_pil.show()'''
+
+        '''img_path = os.path.join(self.img_dir, 'test.png')
+        util.save_image(image_numpy, img_path)
+        tensor1 = segs
+        transform1 = transforms.ToPILImage(mode="L")
+        image1 = transform1(np.uint8(tensor1.numpy()))  # Image接受的图像格式必须为uint8，否则就会报错
+        print(tensor1.size())
+        print(image1)
+        image1.show()
+        image1.save("gray.jpg")'''
         return ret.clamp(max=1, min=0) * 2 - 1
 
     def get_weight_for_ctx(self, x, y):
         """Get weight for context preserving loss"""
+        '''x_image_numpy = util.tensor2im(x)
+        x_image_pil = Image.fromarray(x_image_numpy)
+        x_image_pil.show()
+        y_image_numpy = util.tensor2im(y)
+        y_image_pil = Image.fromarray(y_image_numpy)
+        y_image_pil.show()'''
         z = self.merge_masks(torch.cat([x, y], dim=1))
+
+        '''z_image_numpy = util.tensor2im(z)
+        z_image_pil = Image.fromarray(z_image_numpy)
+        z_image_pil.show()
+        z_ret = (1 - z) / 2
+        z_ret_image_numpy = util.tensor2im(z_ret)
+        z_ret_image_pil = Image.fromarray(z_ret_image_numpy)
+        z_ret_image_pil.show()'''
         return (1 - z) / 2  # [-1,1] -> [1,0]
 
     def weighted_L1_loss(self, src, tgt, weight):
