@@ -150,10 +150,10 @@ class InstaGANModel(BaseModel):
         """L1 loss with given weight (used for context preserving loss)"""
         return torch.mean(weight * torch.abs(src - tgt))
 
-    def get_weight_for_cx(self, x, y):
+    def get_weight_for_cx(self, seg):
         """Get weight for context preserving loss"""
-        z = self.merge_masks(torch.cat([x, y], dim=1))
-        return (1 - z) / 2  # [-1,1] -> [1,0]
+        z = (seg + 1) / 2
+        return z.clamp(max=1, min=0)  # [-1,1] -> [1,0]
 
     def multiply_cx(self, src, weight):
         """L1 loss with given weight (used for context preserving loss)"""
@@ -280,35 +280,51 @@ class InstaGANModel(BaseModel):
             weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
             self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng, weight=weight_A) * lambda_A * lambda_ctx
             layers = {"conv_1_1": 1.0,"conv_3_2": 1.0}
-            I = torch.rand(1, 3, 128, 128).cuda()
-            T = torch.randn(1, 3, 128, 128).cuda()
-            I = self.fake_B_mul  # 生成的B域的图
-            T = self.real_B_sng  # 目标域B的真实图
+            #I = torch.rand(1, 3, 128, 128).cuda()
+            #T = torch.randn(1, 3, 128, 128).cuda()
+            #I = self.fake_B_mul  # 生成的B域的图
+            #T = self.real_B_sng  # 目标域B的真实图
             I = self.fake_B_img_sng
             T = self.real_B_img_sng
-            I_multiply = self.fake_B_seg_mul * I
-            T_multiply = self.real_B_seg_sng * T
 
+            '''
+            for i in self.real_B_seg_sng:
+                for j in i:
+                    for line in j:
+                        print(line)
+            '''
+
+            weight_I = self.get_weight_for_cx(self.fake_B_seg_mul)
+            weight_T = self.get_weight_for_cx(self.real_B_seg_sng)
+
+
+            I_multiply = weight_I * I
+            T_multiply = weight_T * T
+
+
+            '''
             x_image_numpy = util.tensor2im(I)
             x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
+            x_image_pil.show()
             y_image_numpy = util.tensor2im(T)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
 
             x_image_numpy = util.tensor2im(self.fake_B_seg_mul)
             x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
+            x_image_pil.show()
             y_image_numpy = util.tensor2im(self.real_B_seg_sng)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
 
             x_image_numpy = util.tensor2im(I_multiply)
             x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
+            x_image_pil.show()
             y_image_numpy = util.tensor2im(T_multiply)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
+            '''
+
 
             contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
             # print('cxloss_A', contex_loss(I_multiply, T_multiply))
@@ -334,35 +350,42 @@ class InstaGANModel(BaseModel):
             contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
             print('cxloss_B', contex_loss(I, T))'''
             layers = {"conv_1_1": 1.0, "conv_3_2": 1.0}
-            I = torch.rand(1, 3, 128, 128).cuda()
-            T = torch.randn(1, 3, 128, 128).cuda()
-            I = self.fake_A_mul  # 生成的B域的图
-            T = self.real_A_sng  # 目标域B的真实图
+            #I = torch.rand(1, 3, 128, 128).cuda()
+            #T = torch.randn(1, 3, 128, 128).cuda()
+            #I = self.fake_A_mul  # 生成的B域的图
+            #T = self.real_A_sng  # 目标域B的真实图
             I = self.fake_A_img_sng
             T = self.real_A_img_sng
-            I_multiply = self.fake_A_seg_mul * I
-            T_multiply = self.real_A_seg_sng * T
 
+            weight_I = self.get_weight_for_cx(self.fake_A_seg_mul)
+            weight_T = self.get_weight_for_cx(self.real_A_seg_sng)
+
+
+            I_multiply = weight_I * I
+            T_multiply = weight_T * T
+
+            '''
             x_image_numpy = util.tensor2im(I)
             x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
+            x_image_pil.show()
             y_image_numpy = util.tensor2im(T)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
 
             x_image_numpy = util.tensor2im(self.fake_B_seg_mul)
             x_image_pil = Image.fromarray(x_image_numpy)
             # x_image_pil.show()
             y_image_numpy = util.tensor2im(self.real_B_seg_sng)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
 
             x_image_numpy = util.tensor2im(I_multiply)
             x_image_pil = Image.fromarray(x_image_numpy)
             # x_image_pil.show()
             y_image_numpy = util.tensor2im(T_multiply)
             y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
+            y_image_pil.show()
+            '''
 
             contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
             # print('cxloss_B', contex_loss(I_multiply, T_multiply))
