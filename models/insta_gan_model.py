@@ -42,7 +42,8 @@ class InstaGANModel(BaseModel):
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
         #self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
-        self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'cx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B', 'cx_B']
+        #self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'cx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B', 'cx_B']
+        self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'cx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'cx_B']
 
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
         visual_names_A_img = ['real_A_img', 'fake_B_img', 'rec_A_img']
