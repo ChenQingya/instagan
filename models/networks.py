@@ -246,83 +246,82 @@ class ResnetGenerator(nn.Module):   # 使用resnet作为生成器的backbone net
 # ResNet generator for "set" of instance attributes
 # See https://openreview.net/forum?id=ryxwJhC9YX for details
 class ResnetSetGenerator(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect'):
-        assert (n_blocks >= 0)
+    def __init__(self, input_nc, ins_per, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=9,
+                 padding_type='reflect'):
+        assert (n_blocks >= 0)  # 默认9个resnet block
         super(ResnetSetGenerator, self).__init__()
         self.input_nc = input_nc
         self.output_nc = output_nc
         self.ngf = ngf
-        if type(norm_layer) == functools.partial:
-            use_bias = norm_layer.func == nn.InstanceNorm2d
+        if type(
+                norm_layer) == functools.partial:  # functools.partial：是一种类型。输入：type(functools.partial),输出type. 判断norm_layer的类型是不是偏函数
+            use_bias = norm_layer.func == nn.InstanceNorm2d  # 是偏函数
         else:
-            use_bias = norm_layer == nn.InstanceNorm2d
+            use_bias = norm_layer == nn.InstanceNorm2d  # 不是偏函数
+
+        model = [nn.ReflectionPad2d(3),  # [1,4,206,206]
+                 #  加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
+                 nn.Conv2d(input_nc + ins_per, ngf, kernel_size=7, padding=0,
+                           bias=use_bias),  # [1,64,200,200]
+                 norm_layer(ngf),  # [1,64,200,200]instancenorm的输出大小与输入相同
+                 nn.ReLU(True)]  # [1,64,200,200]与输入相同
+        model_fuse = [nn.ReflectionPad2d(3),  # [1,4,206,206]
+                      #  加padding，padding的值，为对称关系，refer：https://pytorch.org/docs/stable/nn.html#reflectionpad2d
+                      nn.Conv2d(input_nc + ins_per, ngf, kernel_size=7, padding=0,
+                                bias=use_bias),  # [1,64,200,200]
+                      norm_layer(ngf),  # [1,64,200,200]instancenorm的输出大小与输入相同
+                      nn.ReLU(True)]  # [1,64,200,200]与输入相同
 
         n_downsampling = 2
-        self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.encoder_seg = self.get_encoder(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)  # 2*ngf
-        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 3*ngf
-
-    def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias):
-        model = [nn.ReflectionPad2d(3),
-                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
-                 norm_layer(ngf),
-                 nn.ReLU(True)]
-
         for i in range(n_downsampling):
-            mult = 2 ** i
-            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
+            mult = 2 ** i  # 计算2的i次方
+            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
+                                stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),
                       nn.ReLU(True)]
+            model_fuse += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3,
+                                     stride=2, padding=1, bias=use_bias),
+                           norm_layer(ngf * mult * 2),
+                           nn.ReLU(True)]
 
         mult = 2 ** n_downsampling
         for i in range(n_blocks):
-            model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
+            model += [ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                                  use_bias=use_bias)]
+            model_fuse += [
+                ResnetBlock(ngf * mult, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout,
+                            use_bias=use_bias)]
 
-        return nn.Sequential(*model)
-
-    def get_decoder(self, output_nc, n_downsampling, ngf, norm_layer, use_bias):
-        model = []
         for i in range(n_downsampling):
-            mult = 2**(n_downsampling - i)
-            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=2, padding=1, output_padding=1, bias=use_bias),
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+                                         kernel_size=3, stride=2,
+                                         padding=1, output_padding=1,
+                                         bias=use_bias),
                       norm_layer(int(ngf * mult / 2)),
                       nn.ReLU(True)]
+            model_fuse += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+                                              kernel_size=3, stride=2,
+                                              padding=1, output_padding=1,
+                                              bias=use_bias),
+                           norm_layer(int(ngf * mult / 2)),
+                           nn.ReLU(True)]
         model += [nn.ReflectionPad2d(3)]
+        model_fuse += [nn.ReflectionPad2d(3)]
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        model_fuse += [nn.Conv2d(ngf, ins_per, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
-        return nn.Sequential(*model)
+        model_fuse += [nn.Tanh()]
 
-    def forward(self, inp):
-        # split data
-        img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
-        mean = (segs + 1).mean(0).mean(-1).mean(-1)
-        if mean.sum() == 0:
-            mean[0] = 1  # forward at least one segmentation
+        self.model = nn.Sequential(*model)
+        self.model_fuse = nn.Sequential(*model_fuse)
 
-        # run encoder
-        enc_img = self.encoder_img(img)
-        enc_segs = list()
-        for i in range(segs.size(1)):
-            if mean[i] > 0:  # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)
-                enc_segs.append(self.encoder_seg(seg))
-        enc_segs = torch.cat(enc_segs)
-        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
-
-        # run decoder
-        feat = torch.cat([enc_img, enc_segs_sum], dim=1)
-        out = [self.decoder_img(feat)]
-        idx = 0
-        for i in range(segs.size(1)):
-            if mean[i] > 0:
-                enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
-                idx += 1  # move to next index
-                feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
-                out += [self.decoder_seg(feat)]
-            else:
-                out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
+    def forward(self, input):
+        out = []
+        result = self.model(input)
+        result_fuse = self.model_fuse(input)
+        out.append(result)
+        out.append(result_fuse)
         return torch.cat(out, dim=1)
 
 
