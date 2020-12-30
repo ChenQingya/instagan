@@ -4,15 +4,15 @@ from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
 import numpy as np
-import copy
+# import copy
 
-from contextualloss.contextual_loss import Contextual_Loss
-import torch.nn.functional as F
-
-from torchvision import transforms
-from PIL import Image
-from util import util
-import os
+from featuresimilarityloss.feature_similarity_loss import Feature_Similarity_Loss
+# import torch.nn.functional as F
+#
+# from torchvision import transforms
+# from PIL import Image
+# from util import util
+# import os
 
 class ObjectVariedGANModel(BaseModel):
     def name(self):
@@ -20,17 +20,16 @@ class ObjectVariedGANModel(BaseModel):
 
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
-        # default CycleGAN did not use dropout，instagan也不使用dropout
         parser.set_defaults(no_dropout=True)
-        parser.add_argument('--set_order', type=str, default='decreasing', help='order of segmentation')			# why there is a order for segmentation?
-        parser.add_argument('--ins_max', type=int, default=4, help='maximum number of instances to forward')		# 所有训练中，最多可以使用到的instance的数目
-        parser.add_argument('--ins_per', type=int, default=2, help='number of instances to forward, for one pass')	# 一次迭代中，使用到的instance的数目
+        parser.add_argument('--set_order', type=str, default='decreasing', help='order of segmentation')
+        parser.add_argument('--ins_max', type=int, default=1, help='maximum number of object to forward')
+        parser.add_argument('--ins_per', type=int, default=1, help='number of object to forward, for one pass')
         if is_train:
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_idt', type=float, default=1.0, help='use identity mapping. Setting lambda_idt other than 0 has an effect of scaling the weight of the identity mapping loss')
-            # what's the difference between ctx and idt?
             parser.add_argument('--lambda_ctx', type=float, default=1.0, help='use context preserving. Setting lambda_ctx other than 0 has an effect of scaling the weight of the context preserving loss')
+            parser.add_argument('--lambda_fx', type=float, default=10.0, help='use feature similarity. Setting lambda_fs other than 0 has an effect of scaling the weight of the feature similarity loss')
 
         return parser
 
@@ -41,9 +40,7 @@ class ObjectVariedGANModel(BaseModel):
                                                                             # “//”，在python中，整数除法，这个叫“地板除”，3//2=1
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
-        #self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
-        #self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'cx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B', 'cx_B']
-        self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'cx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'cx_B']
+        self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'fs_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B', 'fs_B']
 
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
         visual_names_A_img = ['real_A_img', 'fake_B_img', 'rec_A_img']
@@ -64,7 +61,7 @@ class ObjectVariedGANModel(BaseModel):
         self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)	# opt.norm默认是'instance'
         self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
         if self.isTrain:
-            use_sigmoid = opt.no_lsgan	#why?为什么不使用lsgan，就表示用sigmoid？
+            use_sigmoid = opt.no_lsgan
             self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
             self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, opt.init_gain, self.gpu_ids)
 
@@ -93,7 +90,7 @@ class ObjectVariedGANModel(BaseModel):
             self.optimizers.append(self.optimizer_D)
 
     def select_masks(self, segs_batch):
-        """Select instance masks to use"""
+        """Select object masks to use"""
         if self.opt.set_order == 'decreasing':
             return self.select_masks_decreasing(segs_batch)
         elif self.opt.set_order == 'random':
@@ -102,25 +99,15 @@ class ObjectVariedGANModel(BaseModel):
             raise NotImplementedError('Set order name [%s] is not recognized' % self.opt.set_order)
 
     def select_masks_decreasing(self, segs_batch):
-        """Select masks in decreasing order"""	# 猜测是选取前四张大的seg，大的意思是：该seg像素点上的value，总平均值最大
+        """Select masks in decreasing order"""
         ret = list()
-        for segs in segs_batch:					# 错误理解：
-                                                # 	照理说segs_batch类似torch.Size([20, 200, 200])，segs类似torch.Size([1, 200, 200])，
-                                                # 	此时下方mean类似torch.Size([1])，那么将无法计算mean.topk(4),因为根本不够4个！
-                                                # 实际debug:
-                                                # 	查看segs_batch的size是torch.Size([1, 20, 200, 200])，
-                                                # 	则segs的size是torch.Size([20, 200, 200])
+        for segs in segs_batch:
 
             mean = segs.mean(-1).mean(-1)		# mean的size是torch.Size([20])
                                                 # 这里做了两次mean处理，都是在最后一维进行处理，
-                                                # ps. torch.mean():
-                                                # 	具体可看/Users/chenqy/PycharmProjects/instagan/data/seg_understanding.py
-                                                # 	或者看/instagan/models/torchmean_understanding.py
-
             m, i = mean.topk(self.opt.ins_max)	# m是：tensor([-0.7352, -0.7675, -1.0000, -1.0000])，大小是torch.Size([4])。
                                                 # i是tensor([0, 1, 5, 3])，大小是torch.Size([4]),i可能表示前四个大的seg的索引
-                                                # '--ins_max', type=int, default=4, help='maximum number of instances to forward'
-
+                                                # '--ins_max', type=int, default=4, help='maximum number of object to forward'
             ret.append(segs[i, :, :])			# ret是list，其中每个元素shape是torch.Size([4, 200, 200])
 
         return torch.stack(ret)					# torch.stack表示在新的dim上concatenate。
@@ -170,7 +157,7 @@ class ObjectVariedGANModel(BaseModel):
                                                                             # input is the datasets, we use input[idx]to get the item.
                                                                             # eg.input['A'] or input['B'] or input['A_segs'] or input['B_segs']
                                                                             # refer to the "data/unaligned_seg_dataset.py' and see the get_item return the map data
-        self.real_A_img = input['A' if AtoB else 'B'].to(self.device)		# self.real_A_img的shape是torch.Size([1, 3, 200, 200])，一张原图，3通道
+        self.real_A_img = input['A' if AtoB else 'B'].to(self.device)		# self.real_A_img的shape是torch.Size([1, 3, 256, 256])，一张原图，3通道
         self.real_B_img = input['B' if AtoB else 'A'].to(self.device)
 
         real_A_segs = input['A_segs' if AtoB else 'B_segs']					# real_A_segs是domainA（当AtoB时）中的一张图对应的多张segs，所有segs拼接使用cat函数
@@ -188,17 +175,17 @@ class ObjectVariedGANModel(BaseModel):
         self.image_paths = input['A_paths' if AtoB else 'B_paths']			# A_paths是一个list，但是其长度为1，值为'./datasets/shp2gir_coco/trainA/788.png'
 
     def forward(self, idx=0):
-        N = self.opt.ins_per												# '--ins_per', type=int, default=2, help='number of instances to forward, for one pass')	# 一次迭代中，使用到的instance的数目
+        N = self.opt.ins_per												# '--ins_per', type=int, default=2, help='number of object to forward, for one pass')	# 一次迭代中，使用到的object的数目
 
         self.real_A_seg_sng = self.real_A_segs[:, N*idx:N*(idx+1), :, :]  	# ith mask,似乎取第i批mask，一批有ins_iter张（2张）。sng应该表示single的意思。
                                                                             # self.real_A_segs的shape是torch.Size([1, 4, 200, 200]),四张seg
         self.real_B_seg_sng = self.real_B_segs[:, N*idx:N*(idx+1), :, :]  	# ith mask
         empty = -torch.ones(self.real_A_seg_sng.size()).to(self.device)  	# empty image
 
-        self.forward_A = (self.real_A_seg_sng + 1).sum() > 0  				# check if there are remaining instances
+        self.forward_A = (self.real_A_seg_sng + 1).sum() > 0  				# check if there are remaining object
                                                                             # 当forward_A=1时，才前馈并进反向传播
                                                                             # 因为在read_segs()中若seg不存在，则每个像素设置为-1。所以这里(self.real_A_seg_sng + 1)？
-        self.forward_B = (self.real_B_seg_sng + 1).sum() > 0  				# check if there are remaining instances
+        self.forward_B = (self.real_B_seg_sng + 1).sum() > 0  				# check if there are remaining object
 
         # forward A
         if self.forward_A:
@@ -272,6 +259,7 @@ class ObjectVariedGANModel(BaseModel):
         lambda_B = self.opt.lambda_B										# 用于backward B
         lambda_idt = self.opt.lambda_idt									# 用于loss_idt_A和loss_idt_B
         lambda_ctx = self.opt.lambda_ctx
+        lambda_fs = self.opt.lambda_fs
 
         # backward A
         if self.forward_A:
@@ -281,39 +269,14 @@ class ObjectVariedGANModel(BaseModel):
             weight_A = self.get_weight_for_ctx(self.real_A_seg_sng, self.fake_B_seg_sng)
             self.loss_ctx_A = self.weighted_L1_loss(self.real_A_img_sng, self.fake_B_img_sng, weight=weight_A) * lambda_A * lambda_ctx
             layers = {"conv_1_1": 1.0,"conv_3_2": 1.0}
-            I = torch.rand(1, 3, 128, 128).cuda()
-            T = torch.randn(1, 3, 128, 128).cuda()
-            I = self.fake_B_mul  # 生成的B域的图
-            T = self.real_B_sng  # 目标域B的真实图
-            I = self.fake_B_img_sng
-            T = self.real_B_img_sng
+            I = self.fake_B_img_sng # 生成的B域的图
+            T = self.real_B_img_sng # 目标域B的真实图
             I_multiply = self.fake_B_seg_mul * I
             T_multiply = self.real_B_seg_sng * T
 
-            x_image_numpy = util.tensor2im(I)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(T)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            x_image_numpy = util.tensor2im(self.fake_B_seg_mul)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(self.real_B_seg_sng)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            x_image_numpy = util.tensor2im(I_multiply)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(T_multiply)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
-            # print('cxloss_A', contex_loss(I_multiply, T_multiply))
-            self.loss_cx_A = contex_loss(I_multiply, T_multiply)[0]
+            feature_similarity_loss = Feature_Similarity_Loss(layers, max_1d_size=64).cuda()
+            # print('fsloss_A', feature_similarity_loss(I_multiply, T_multiply))
+            self.loss_fs_A = feature_similarity_loss(I_multiply, T_multiply)[0] * lambda_fs
         else:
             self.loss_G_A = 0
             self.loss_cyc_A = 0
@@ -327,47 +290,15 @@ class ObjectVariedGANModel(BaseModel):
             self.loss_idt_A = self.criterionIdt(self.netG_A(self.real_B_sng), self.real_B_sng.detach()) * lambda_B * lambda_idt
             weight_B = self.get_weight_for_ctx(self.real_B_seg_sng, self.fake_A_seg_sng)
             self.loss_ctx_B = self.weighted_L1_loss(self.real_B_img_sng, self.fake_A_img_sng, weight=weight_B) * lambda_B * lambda_ctx
-            '''layers = {"conv_1_1": 1.0, "conv_3_2": 1.0}
-            I = torch.rand(1, 3, 128, 128).cuda()
-            T = torch.randn(1, 3, 128, 128).cuda()
-            I = self.fake_A_mul  # 生成的B域的图
-            T = self.real_A_sng  # 目标域B的真实图
-            contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
-            print('cxloss_B', contex_loss(I, T))'''
             layers = {"conv_1_1": 1.0, "conv_3_2": 1.0}
-            I = torch.rand(1, 3, 128, 128).cuda()
-            T = torch.randn(1, 3, 128, 128).cuda()
-            I = self.fake_A_mul  # 生成的B域的图
-            T = self.real_A_sng  # 目标域B的真实图
-            I = self.fake_A_img_sng
-            T = self.real_A_img_sng
+            I = self.fake_A_img_sng # 生成的B域的图
+            T = self.real_A_img_sng # 目标域B的真实图
             I_multiply = self.fake_A_seg_mul * I
             T_multiply = self.real_A_seg_sng * T
 
-            x_image_numpy = util.tensor2im(I)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(T)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            x_image_numpy = util.tensor2im(self.fake_B_seg_mul)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(self.real_B_seg_sng)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            x_image_numpy = util.tensor2im(I_multiply)
-            x_image_pil = Image.fromarray(x_image_numpy)
-            # x_image_pil.show()
-            y_image_numpy = util.tensor2im(T_multiply)
-            y_image_pil = Image.fromarray(y_image_numpy)
-            # y_image_pil.show()
-
-            contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
-            # print('cxloss_B', contex_loss(I_multiply, T_multiply))
-            self.loss_cx_B = contex_loss(I_multiply, T_multiply)[0]
+            feature_similarity_loss = Feature_Similarity_Loss(layers, max_1d_size=64).cuda()
+            # print('fsloss_B', feature_similarity_loss(I_multiply, T_multiply))
+            self.loss_fs_B = feature_similarity_loss(I_multiply, T_multiply)[0] * lambda_fs
         else:
             self.loss_G_B = 0
             self.loss_cyc_B = 0
@@ -375,8 +306,7 @@ class ObjectVariedGANModel(BaseModel):
             self.loss_ctx_B = 0
 
         # combined loss
-        # self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B + self.loss_cx_A + self.loss_cx_B
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B + self.loss_fs_A + self.loss_fs_B
         self.loss_G.backward()	# 生成器A和生成器B的各种loss为总G的loss，反向传播
 
     def backward_D_basic(self, netD, real, fake):

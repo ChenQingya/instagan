@@ -6,7 +6,7 @@ from . import networks
 
 from PIL import Image
 from util import util
-from contextualloss.contextual_loss import Contextual_Loss
+from featuresimilarityloss.feature_similarity_loss import Feature_Similarity_Loss
 
 
 
@@ -30,7 +30,7 @@ class CycleGANModel(BaseModel):
         BaseModel.initialize(self, opt)
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'cx_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'cx_B']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
@@ -158,39 +158,8 @@ class CycleGANModel(BaseModel):
         # Backward cycle loss
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
-        # my cxloss
-        layers = {"conv_1_1": 1.0, "conv_3_2": 1.0}
-        I = torch.rand(1, 3, 128, 128).cuda()
-        T = torch.randn(1, 3, 128, 128).cuda()
-        I = self.fake_B  # 生成的B域的图
-        T = self.real_B # 目标域B的真实图
-        I_multiply = I# 无需seg相乘
-        T_multiply = T
-
-        contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
-        # print('cxloss_A', contex_loss(I_multiply, T_multiply))
-        self.loss_cx_A = contex_loss(I_multiply, T_multiply)[0]
-
-        layers = {"conv_1_1": 1.0, "conv_3_2": 1.0}
-
-        I = self.fake_A # 生成的B域的图
-        T = self.real_A # 目标域B的真实图
-        I_multiply = I
-        T_multiply = T
-
-        x_image_numpy = util.tensor2im(I)
-        x_image_pil = Image.fromarray(x_image_numpy)
-        # x_image_pil.show()
-        y_image_numpy = util.tensor2im(T)
-        y_image_pil = Image.fromarray(y_image_numpy)
-        # y_image_pil.show()
-
-        contex_loss = Contextual_Loss(layers, max_1d_size=64).cuda()
-        # print('cxloss_B', contex_loss(I_multiply, T_multiply))
-        self.loss_cx_B = contex_loss(I_multiply, T_multiply)[0]
-
         # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B + self.loss_cx_A + self.loss_cx_B
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
         self.loss_G.backward()
 
     def optimize_parameters(self):
