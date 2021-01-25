@@ -4,6 +4,11 @@ from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
 
+from PIL import Image
+from util import util
+from featuresimilarityloss.feature_similarity_loss import Feature_Similarity_Loss
+
+
 
 class CycleGANModel(BaseModel):
     def name(self):
