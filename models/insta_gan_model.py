@@ -34,18 +34,18 @@ class InstaGANModel(BaseModel):
 																			# “//”，在python中，整数除法，这个叫“地板除”，3//2=1
 
 		# specify the training losses you want to print out. The program will call base_model.get_current_losses
-		# self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
+		self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'ctx_A', 'D_B', 'G_B', 'cyc_B', 'idt_B', 'ctx_B']
 		# 删掉ctx_A,ctx_B
-		self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'D_B', 'G_B', 'cyc_B', 'idt_B']
+		#self.loss_names = ['D_A', 'G_A', 'cyc_A', 'idt_A', 'D_B', 'G_B', 'cyc_B', 'idt_B']
 
 		# specify the images you want to save/display. The program will call base_model.get_current_visuals
 		visual_names_A_img = ['real_A_img', 'fake_B_img', 'rec_A_img']
 		visual_names_B_img = ['real_B_img', 'fake_A_img', 'rec_B_img']
 		visual_names_A_seg = ['real_A_seg', 'fake_B_seg', 'rec_A_seg']
 		visual_names_B_seg = ['real_B_seg', 'fake_A_seg', 'rec_B_seg']
-		# self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
+		self.visual_names = visual_names_A_img + visual_names_A_seg + visual_names_B_img + visual_names_B_seg	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
 		# 暂时注释不保存seg
-		self.visual_names = visual_names_A_img + visual_names_B_img	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
+		# self.visual_names = visual_names_A_img + visual_names_B_img	# 索引，可以根据索引入‘fake_B_img’获得的生成的假的domainB的图片，用于计算IS
 
 		# specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
 		if self.isTrain:													#isTrain：True时表示是执行了train.py，否则执行了test.py
@@ -337,6 +337,10 @@ class InstaGANModel(BaseModel):
 				# update setting for next iteration
 				self.real_A_img_sng = self.fake_B_img_sng.detach()
 				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				self.fake_A_seg_sng.detach()
+				self.fake_B_seg_sng.detach()
+				self.rec_A_seg_sng.detach()
+				self.rec_B_seg_sng.detach()
 				# self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
 				# self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
 				# self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
@@ -349,6 +353,10 @@ class InstaGANModel(BaseModel):
 				if i == self.ins_iter - 1:  # last
 					self.fake_A_img = self.fake_A_img_sng
 					self.fake_B_img = self.fake_B_img_sng
+					self.fake_A_seg = self.fake_A_seg_sng
+					self.fake_B_seg = self.fake_B_seg_sng
+					self.rec_A_seg = self.rec_A_seg_sng
+					self.rec_B_seg = self.rec_B_seg_sng
 				# self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
 				# self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
 				# self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
@@ -440,7 +448,8 @@ class InstaGANModel(BaseModel):
 
 		# combined loss
 		if self.opt.netG=='star':
-			self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B
+			#self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B
+			self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
 		else:
 			self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cyc_A + self.loss_cyc_B + self.loss_idt_A + self.loss_idt_B + self.loss_ctx_A + self.loss_ctx_B
 
@@ -547,6 +556,10 @@ class InstaGANModel(BaseModel):
 			if self.opt.netG=='star':
 				self.real_A_img_sng = self.fake_B_img_sng.detach()
 				self.real_B_img_sng = self.fake_A_img_sng.detach()
+				self.fake_A_seg_sng.detach()
+				self.fake_B_seg_sng.detach()
+				self.rec_A_seg_sng.detach()
+				self.rec_B_seg_sng.detach()
 				# self.fake_A_seg_list.append(self.fake_A_seg_sng.detach())
 				# self.fake_B_seg_list.append(self.fake_B_seg_sng.detach())
 				# self.rec_A_seg_list.append(self.rec_A_seg_sng.detach())
@@ -559,6 +572,10 @@ class InstaGANModel(BaseModel):
 				if i == self.ins_iter - 1:  # last
 					self.fake_A_img = self.fake_A_img_sng
 					self.fake_B_img = self.fake_B_img_sng
+					self.fake_A_seg = self.fake_A_seg_sng
+					self.fake_B_seg = self.fake_B_seg_sng
+					self.rec_A_seg = self.rec_A_seg_sng
+					self.rec_B_seg = self.rec_B_seg_sng
 					# self.fake_A_seg = self.merge_masks(self.fake_A_seg_mul)
 					# self.fake_B_seg = self.merge_masks(self.fake_B_seg_mul)
 					# self.rec_A_seg = self.merge_masks(torch.cat(self.rec_A_seg_list, dim=1))
